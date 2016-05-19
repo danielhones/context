@@ -39,6 +39,14 @@ class SourceCode(object):
 def walk(node, matcher=lambda x: None, history=None):
     matches = []
     history = [] if history is None else history[:]
+
+    def add_to_history(item):
+        try: history.append(item.lineno)
+        except AttributeError: pass
+
+    def pop_from_history():
+        try: history.pop()
+        except IndexError: pass
     
     children = list(ast.iter_child_nodes(node))
     match = matcher(node)
@@ -50,30 +58,15 @@ def walk(node, matcher=lambda x: None, history=None):
     if len(children) == 0:
         return matches
     
-    try:
-        history.append(node.lineno)
-    except AttributeError:
-        pass
+    add_to_history(node)
     
     for i in children:
-        try:
-            history.append(i.lineno)
-        except AttributeError:
-            pass
-
+        add_to_history(i)
         matches.extend(walk(i, matcher, history))
+        pop_from_history()
 
-        try:
-            history.pop()
-        except IndexError:
-            pass
-
-    try:
-        history.pop()
-    except IndexError:
-        pass
-
-
+    pop_from_history()
+    
     return matches
 
 
