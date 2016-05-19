@@ -26,20 +26,39 @@ class SourceCode(object):
         return "SourceCode('{}', {})".format(self.filename, self.offset)
 
     def line(self, lineno):
-        return self.lines[lineno + self.line_offset]
+        return self.lines[lineno - self.offset]
 
+    @property
     def numlines(self):
         return len(self.lines)
 
     def format_line(self, lineno):
-        return "{}:  {}".format(str(lineno).ljust(self.numlines), self.line(lineno))
+        return "{}:  {}".format(str(lineno).ljust(len(str(self.numlines))), self.line(lineno))
 
 
+def find_context(source, tree, look_for):
+    """
+    Return a list of lines indicating branches that lead to the object we're looking for
+    """
+    matching_lines = []
+
+    for node in ast.walk(tree):
+        for i in node._fields:
+            if getattr(node, i) == look_for:
+                matching_lines.append(node.lineno)
+
+    return [source.format_line(i) for i in matching_lines]
+        
+
+
+def parse_source(filename):
+    with open(filename, "r") as f:
+        tree = ast.parse(f.read(), filename=filename)
+    return tree
+
+    
 def usage():
-    echo(
-        "Usage:\n"
-        "context.py <filename> <object>"
-    )
+    echo("Usage:\ncontext.py <filename> <object>")
 
 
 def parse_args():
@@ -52,7 +71,9 @@ def parse_args():
 
 def main(source_file, look_for):
     source = SourceCode(source_file)
-    echo(source)
+    tree = parse_source(source_file)
+    context = find_context(source, tree, look_for)
+    print("".join(context))
 
 
 if __name__ == "__main__":
