@@ -11,8 +11,7 @@ class FooClass:
     def bar(self):
         print("in bar")
         if self.a > self.b:
-            print("a > b")
-            print("bar: {}".format(self.a))
+            pass
 
     def baz(self):
         print("in baz")
@@ -33,4 +32,3 @@ if __name__ == "__main__":
 
 if __name__ == "something different":
     baz()
-    print("nope")

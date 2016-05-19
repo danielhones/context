@@ -36,9 +36,20 @@ class SourceCode(object):
         return "{}:  {}".format(str(lineno).rjust(len(str(self.numlines))), self.line(lineno))
 
 
-def walk(node, matcher=lambda x: None, history=None):
-    matches = []
+def make_matcher(look_for=None):
+    def _matcher(node):
+        for attr in node._fields:
+            value = getattr(node, attr)
+            if value == look_for:
+                try: return node.lineno
+                except AttributeError: return None
+        return None
+    return _matcher
+
+
+def walk(node, matcher=make_matcher(), history=None):
     history = [] if history is None else history[:]
+    matches = []
 
     def add_to_history(item):
         try: history.append(item.lineno)
@@ -70,23 +81,20 @@ def walk(node, matcher=lambda x: None, history=None):
     return matches
 
 
-def find_context(source, tree, look_for):
+def find_top_level(tree, look_for):
+    # map look_for to ast syntax tree
+    match_class = ast.FunctionDef  #[look_for]
+    matches = [i.lineno for i in ast.iter_child_nodes(tree) if isinstance(i, match_class)]
+    return matches
+
+
+def find_context(tree, look_for):
     """
     Return a list of lines indicating branches that lead to the object we're looking for
     """
-    matching_lines = []
-
-    def matcher(node):
-        for attr in node._fields:
-            value = getattr(node, attr)
-            if value == look_for:
-                try:
-                    return node.lineno
-                except AttributeError:
-                    return None
-        return None
-        
-    matches = walk(tree, matcher)
+    # TODO: Add something to parse look_for, for example FooClass.bar should only match bar
+    #       function calls that are attributes of a FooClass instance
+    matches = walk(tree, make_matcher(look_for))
     matches = list(set(matches))
     return sorted(matches)
 
@@ -112,7 +120,7 @@ def parse_args():
 def main(source_file, look_for):
     source = SourceCode(source_file)
     tree = parse_source(source_file)
-    context = find_context(source, tree, look_for)
+    context = find_context(tree, look_for)
     echo("\n" + "".join([source.format_line(i) for i in context]))
 
 
