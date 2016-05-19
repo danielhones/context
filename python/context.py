@@ -49,7 +49,12 @@ def walk(node, matcher=lambda x: None, history=None):
 
     if len(children) == 0:
         return matches
-
+    
+    try:
+        history.append(node.lineno)
+    except AttributeError:
+        pass
+    
     for i in children:
         try:
             history.append(i.lineno)
@@ -62,6 +67,12 @@ def walk(node, matcher=lambda x: None, history=None):
             history.pop()
         except IndexError:
             pass
+
+    try:
+        history.pop()
+    except IndexError:
+        pass
+
 
     return matches
 
