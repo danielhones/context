@@ -33,7 +33,12 @@ class SourceCode(object):
         return len(self.lines)
 
     def format_line(self, lineno):
-        return "{}:  {}".format(str(lineno).ljust(len(str(self.numlines))), self.line(lineno))
+        return "{}:  {}".format(str(lineno).rjust(len(str(self.numlines))), self.line(lineno))
+
+
+def walk(node, matcher=lambda x: None):
+    matches = [matcher(i) for i in ast.walk(node)]
+    return [i for i in matches if i is not None]
 
 
 def find_context(source, tree, look_for):
@@ -42,13 +47,14 @@ def find_context(source, tree, look_for):
     """
     matching_lines = []
 
-    for node in ast.walk(tree):
+    def matcher(node):
         for i in node._fields:
             if getattr(node, i) == look_for:
-                matching_lines.append(node.lineno)
-
-    return [source.format_line(i) for i in matching_lines]
+                return node.lineno
+        return None
         
+    matches = walk(tree, matcher)
+    return sorted(matches)
 
 
 def parse_source(filename):
@@ -73,7 +79,7 @@ def main(source_file, look_for):
     source = SourceCode(source_file)
     tree = parse_source(source_file)
     context = find_context(source, tree, look_for)
-    print("".join(context))
+    echo("".join([source.format_line(i) for i in context]))
 
 
 if __name__ == "__main__":
