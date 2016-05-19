@@ -36,9 +36,34 @@ class SourceCode(object):
         return "{}:  {}".format(str(lineno).rjust(len(str(self.numlines))), self.line(lineno))
 
 
-def walk(node, matcher=lambda x: None):
-    matches = [matcher(i) for i in ast.walk(node)]
-    return [i for i in matches if i is not None]
+def walk(node, matcher=lambda x: None, history=None):
+    matches = []
+    history = [] if history is None else history[:]
+    
+    children = list(ast.iter_child_nodes(node))
+    match = matcher(node)
+            
+    if match:
+        matches.append(match)
+        matches = list(set(matches + history))
+
+    if len(children) == 0:
+        return matches
+
+    for i in children:
+        try:
+            history.append(i.lineno)
+        except AttributeError:
+            pass
+
+        matches.extend(walk(i, matcher, history))
+
+        try:
+            history.pop()
+        except IndexError:
+            pass
+
+    return matches
 
 
 def find_context(source, tree, look_for):
@@ -48,12 +73,15 @@ def find_context(source, tree, look_for):
     matching_lines = []
 
     def matcher(node):
-        for i in node._fields:
-            if getattr(node, i) == look_for:
+        for attr in node._fields:
+            value = getattr(node, attr)
+            if value == look_for:
                 return node.lineno
         return None
         
     matches = walk(tree, matcher)
+    matches = list(set(matches))
+    print("\n\n========\n{}\n=========\n\n".format(matches))
     return sorted(matches)
 
 
