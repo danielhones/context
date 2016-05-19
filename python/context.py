@@ -76,12 +76,14 @@ def find_context(source, tree, look_for):
         for attr in node._fields:
             value = getattr(node, attr)
             if value == look_for:
-                return node.lineno
+                try:
+                    return node.lineno
+                except AttributeError:
+                    return None
         return None
         
     matches = walk(tree, matcher)
     matches = list(set(matches))
-    print("\n\n========\n{}\n=========\n\n".format(matches))
     return sorted(matches)
 
 
@@ -107,7 +109,7 @@ def main(source_file, look_for):
     source = SourceCode(source_file)
     tree = parse_source(source_file)
     context = find_context(source, tree, look_for)
-    echo("".join([source.format_line(i) for i in context]))
+    echo("\n" + "".join([source.format_line(i) for i in context]))
 
 
 if __name__ == "__main__":
