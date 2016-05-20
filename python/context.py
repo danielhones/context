@@ -1,7 +1,6 @@
 #!/usr/bin/python3
-
-
 import ast
+import argparse
 import sys
 
 
@@ -104,20 +103,8 @@ def parse_source(filename):
         tree = ast.parse(f.read(), filename=filename)
     return tree
 
-    
-def usage():
-    echo("Usage:\ncontext.py <filename> <object>")
 
-
-def parse_args():
-    if len(sys.argv) < 3:
-        usage()
-        sys.exit(1)
-
-    return sys.argv[1], sys.argv[2]
-
-
-def main(source_file, look_for):
+def main(look_for, source_file):
     source = SourceCode(source_file)
     tree = parse_source(source_file)
     context = find_context(tree, look_for)
@@ -125,4 +112,9 @@ def main(source_file, look_for):
 
 
 if __name__ == "__main__":
-    main(*parse_args())
+    parser = argparse.ArgumentParser()
+    parser.add_argument("look_for", help="object to look for in the file")
+    parser.add_argument("filename", help="file (or directory if -r option) to look in")
+
+    args = parser.parse_args()
+    main(args.look_for, args.filename)
