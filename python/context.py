@@ -144,5 +144,5 @@ if __name__ == "__main__":
         ignore = args.ignore.split(",") + IGNORE_DIRECTORIES
     else:
         ignore = IGNORE_DIRECTORIES
-    echo("IGNRE: {}".format(ignore))
+
     main(args.look_for, args.path, recursive=args.recursive, ignore=ignore)
