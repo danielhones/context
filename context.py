@@ -11,7 +11,7 @@ SEARCH_DEFAULT, SEARCH_LINENO, SEARCH_REGEX = range(3)
 
 
 def echo(*args):
-    """Avoiding print so it works with Python 2 and 3"""
+    """A poor man's print"""
     output = " ".join([str(i) for i in args]) + "\n"
     sys.stdout.write(output)
 
@@ -19,7 +19,7 @@ def echo(*args):
 class SourceCode(object):
     def __init__(self, filename, offset=1):
         """
-        offset is the difference between 0 and the number of the first line of the file.  It's probably 1
+        offset is the difference between the number of the first line of the file and 0.  It's probably 1.
         """
         self.offset = offset
         self.filename = filename
@@ -42,7 +42,6 @@ class SourceCode(object):
 
 
 def make_matcher(search_type, look_for):
-    print("make_matcher called with {}, {}".format(search_type, look_for))
     def _regex(node):
         try: lineno = node.lineno
         except: return None
@@ -62,18 +61,16 @@ def make_matcher(search_type, look_for):
         except: return None
         return lineno if lineno == look_for else None
 
-    matcher = {SEARCH_DEFAULT: _default,
-               SEARCH_LINENO: _lineno,
-               SEARCH_REGEX: _regex}[search_type]
-    print("returning: {}".format(matcher.__name__))
-    return matcher
+    return {SEARCH_DEFAULT: _default,
+            SEARCH_LINENO: _lineno,
+            SEARCH_REGEX: _regex}[search_type]
 
 
 def walk(node, matcher, history=None):
     history = [] if history is None else history[:]
     matches = []
 
-    def add_to_history(item):
+    def append_to_history(item):
         try: history.append(item.lineno)
         except AttributeError: pass
 
@@ -91,9 +88,9 @@ def walk(node, matcher, history=None):
     if len(children) == 0:
         return matches
 
-    add_to_history(node)
+    append_to_history(node)
     for i in children:
-        add_to_history(i)
+        append_to_history(i)
         matches.extend(walk(i, matcher, history))
         pop_from_history()
     pop_from_history()
