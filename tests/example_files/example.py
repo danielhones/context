@@ -1,6 +1,4 @@
-"""
-A simple Python file for testing context.py
-"""
+from otherfoo import baz
 
 
 class FooClass:

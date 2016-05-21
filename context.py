@@ -86,7 +86,7 @@ def walk(node, matcher, history=None):
         matches = list(set(matches + history))
 
     if len(children) == 0:
-        return matches
+        return set(matches)
 
     append_to_history(node)
     for i in children:
@@ -95,7 +95,7 @@ def walk(node, matcher, history=None):
         pop_from_history()
     pop_from_history()
 
-    return matches
+    return set(matches)
 
 
 def find_top_level(tree, depth=1):
@@ -110,8 +110,7 @@ def find_context(tree, look_for, matcher):
     # TODO: Add something to parse look_for, for example FooClass.bar should only match bar
     #       function calls that are attributes of a FooClass instance
     matches = walk(tree, matcher)
-    matches = list(set(matches))
-    return sorted(matches)
+    return sorted(list(matches))
 
 
 def parse_source(filename):
