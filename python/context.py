@@ -7,6 +7,7 @@ import re
 
 
 IGNORE_DIRECTORIES = ["__pycache__", ".git"]
+SEARCH_DEFAULT, SEARCH_LINENO, SEARCH_REGEX = range(3)
 
 
 def echo(*args):
@@ -40,27 +41,32 @@ class SourceCode(object):
         return "{}:  {}".format(str(lineno).rjust(len(str(self.numlines))), self.line(lineno))
 
 
-def make_default_matcher(look_for):
-    def _matcher(node):
+def make_matcher(search_type, look_for):
+    print("make_matcher called with {}, {}".format(search_type, look_for))
+    def _regex(node):
         try: lineno = node.lineno
         except: return None
-    
-        # TODO: this is so ugly, make it better:
-        if type(look_for) is int and lineno == look_for:
-            return lineno
-        else:
-            for attr in node._fields:
-                if type(look_for) is str and getattr(node, attr) == look_for:
-                    return lineno
-                else:  # assume it's a regex
-                    try:
-                        if look_for.match(getattr(node, attr)):
-                            return lineno
-                    except:
-                        continue
+        for attr in node._fields:
+            if look_for.match(getattr(node, attr)):
+                return lineno
 
-        return None
-    return _matcher
+    def _default(node):
+        try: lineno = node.lineno
+        except: return None
+        for attr in node._fields:
+            if type(look_for) is str and getattr(node, attr) == look_for:
+                return lineno       
+
+    def _lineno(node):
+        try: lineno = node.lineno
+        except: return None
+        return lineno if lineno == look_for else None
+
+    matcher = {SEARCH_DEFAULT: _default,
+               SEARCH_LINENO: _lineno,
+               SEARCH_REGEX: _regex}[search_type]
+    print("returning: {}".format(matcher.__name__))
+    return matcher
 
 
 def walk(node, matcher, history=None):
@@ -100,13 +106,13 @@ def find_top_level(tree, depth=1):
     return matches
 
 
-def find_context(tree, look_for):
+def find_context(tree, look_for, matcher):
     """
     Return a list of lines indicating branches that lead to the object we're looking for
     """
     # TODO: Add something to parse look_for, for example FooClass.bar should only match bar
     #       function calls that are attributes of a FooClass instance
-    matches = walk(tree, make_default_matcher(look_for))
+    matches = walk(tree, matcher)
     matches = list(set(matches))
     return sorted(matches)
 
@@ -117,13 +123,14 @@ def parse_source(filename):
     return tree
 
 
-def main(look_for, files, search_type='default', recursive=False, ignore=IGNORE_DIRECTORIES, verbose=False, definitions=False):
+def main(look_for, files, search_type=SEARCH_DEFAULT, recursive=False,
+         ignore=IGNORE_DIRECTORIES, verbose=False, definitions=False):
     """
     search_type can be default|lineno|regex
     """
-    if search_type == "regex":
+    if search_type == SEARCH_REGEX:
         look_for = re.compile(look_for)
-    elif search_type == "lineno":
+    elif search_type == SEARCH_LINENO:
         look_for = int(look_for)
 
     if recursive:
@@ -148,7 +155,7 @@ def main(look_for, files, search_type='default', recursive=False, ignore=IGNORE_
                 if definitions:
                     context = find_top_level(tree)
                 else:
-                    context = find_context(tree, look_for)
+                    context = find_context(tree, look_for, make_matcher(search_type, look_for))
             except KeyboardInterrupt as e:
                 sys.exit(1)
             except Exception as e:
@@ -169,17 +176,19 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("look_for", help="object to look for in the file")
     parser.add_argument("path", help="file (or directory if -r option) to look in")
-    parser.add_argument("-r", "--recursive", help="recursively search directory", action="store_true")
-    parser.add_argument("-n", "--searchline", help="search by line number", action="store_true")
-    parser.add_argument("-e", "--searchregex", help="search by regexp", action="store_true")
-    parser.add_argument("-v", "--verbose", help="display information about errors and skipped files", action="store_true")
-    parser.add_argument(
-        "-i", "--ignore",
-        help="comma-separated list of files and directories to ignore, default is {}".format(IGNORE_DIRECTORIES))
+    parser.add_argument("-r", "--recursive", action="store_true", help="recursively search directory")
+    parser.add_argument("-n", "--search-line", dest="search_type", action="store_const", const=SEARCH_LINENO,
+                        help="search by line number")
+    parser.add_argument("-e", "--search-regex", dest="search_type", action="store_const", const=SEARCH_REGEX,
+                        help="search by regexp")
+    parser.add_argument("-v", "--verbose", action="store_true",
+                        help="display information about errors and skipped files")
+    parser.add_argument("-i", "--ignore",
+                        help=("comma-separated list of files and directories "
+                              "to ignore, default is {}".format(IGNORE_DIRECTORIES)))
     parser.add_argument("-d", "--definitions", action="store_true",
-                        help="just look for class and function defintions.  The look_for argument should be an integer indicating the maxmimum depth of search")
-        
-
+                        help=("just look for class and function defintions.  The look_for argument "
+                              "should be an integer indicating the maxmimum depth of search"))
     args = parser.parse_args()
 
     if args.ignore:
@@ -187,16 +196,9 @@ if __name__ == "__main__":
     else:
         ignore = IGNORE_DIRECTORIES
 
-    if args.searchline:
-        search_type = "lineno"
-    elif args.searchregex:
-        search_type = "regex"
-    else:
-        search_type = "default"
-
     main(args.look_for,
          args.path,
-         search_type=search_type,
+         search_type=args.search_type or SEARCH_DEFAULT,
          recursive=args.recursive,
          ignore=ignore,
          verbose=args.verbose,
