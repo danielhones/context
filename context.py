@@ -46,8 +46,11 @@ def make_matcher(search_type, look_for):
         try: lineno = node.lineno
         except: return None
         for attr in node._fields:
-            if look_for.match(getattr(node, attr)):
-                return lineno
+            try:
+                if look_for.match(getattr(node, attr)):
+                    return lineno
+            except:
+                pass
 
     def _default(node):
         try: lineno = node.lineno

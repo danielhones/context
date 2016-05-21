@@ -2,7 +2,11 @@ import unittest
 import ast
 import re
 import sys, os
-sys.path.append(os.path.dirname(os.path.realpath(__file__)))
+
+this_file_dir = os.path.dirname(os.path.realpath(__file__))
+context_dir = os.path.abspath(os.path.join(this_file_dir, ".."))
+sys.path.append(context_dir)
+
 from context import *
 
 
