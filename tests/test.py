@@ -105,6 +105,11 @@ class TestMain(unittest.TestCase):
                             (TMP_FILE, BAR_LINE_NOS))
         os.remove(TMP_FILE)
 
+    @unittest.skip("Skipping for now, context.py doesn't currently support this")
+    def test_recursive_directory_and_filename(self):
+        self.contexts = context.main("bar", ["examples/", "test.py"], recursive=True)
+        self.assertAccurate(2, (self.EXAMPLE_FILE_RELPATH, self.THIS_FILE_RELPATH), "doesn't matter")
+
     def test_ignore_files_with_directory(self):
         self.contexts = context.main("bar", ["."], ignore=["example_files/"], recursive=True)
         self.assertAccurate(1, self.THIS_FILE_RELPATH, self.EXAMPLE_FILE_RELPATH)

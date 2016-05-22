@@ -134,7 +134,7 @@ def main(look_for, files, search_type=SEARCH_DEFAULT, recursive=False, ignore=IG
     look_for is a string, files is a list of paths
     """
     if recursive:
-        files = itertools.chain.from_iterable([os.walk(f) for f in files])
+        files = itertools.chain(*[os.walk(f) for f in files])
     else:
         # format returned by os.walk:
         files = [(os.curdir, [], [f]) for f in files]
@@ -167,7 +167,7 @@ def main(look_for, files, search_type=SEARCH_DEFAULT, recursive=False, ignore=IG
             except KeyboardInterrupt as e:
                 sys.exit(1)
             except Exception as e:
-                skipped_files[source_file] = e
+                skipped_files[source_file] = "{}: {}".format(e.__class__.__name__, e)
                 continue
             if len(context) == 0:
                 continue
