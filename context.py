@@ -5,6 +5,7 @@ import sys
 import os
 import glob
 import re
+import itertools
 
 
 IGNORE_DIRECTORIES = ["__pycache__", ".git"]
@@ -132,9 +133,12 @@ def main(look_for, files, search_type=SEARCH_DEFAULT, recursive=False, ignore=IG
     """
     look_for is a string, files is a list of paths
     """
+    if recursive:
+        files = itertools.chain.from_iterable([os.walk(f) for f in files])
+    else:
+        # format returned by os.walk:
+        files = [(os.curdir, [], [f]) for f in files]
 
-    # TODO: make recursive handle multiple directories, make sure ignore works right
-    files = os.walk(files[0]) if recursive else [(os.curdir, [], [f]) for f in files]  # format returned by os.walk
     all_contexts = {}
     skipped_files = {}
 

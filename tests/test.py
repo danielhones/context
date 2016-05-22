@@ -6,6 +6,7 @@ if sys.version_info.major == 2:
 else:
     from io import StringIO
 import os
+import shutil
 
 THIS_FILE_DIR = os.path.dirname(os.path.realpath(__file__))
 context_dir = os.path.abspath(os.path.join(THIS_FILE_DIR, ".."))
@@ -91,9 +92,18 @@ class TestMain(unittest.TestCase):
         self.contexts = context.main("TestCase", ["."], recursive=True)
         self.assertAccurate(1, self.THIS_FILE_RELPATH, self.EXAMPLE_FILE_RELPATH)
 
-    @unittest.skip("skipping till test is written")
     def test_recursive_multiple_directories(self):
-        pass
+        if not os.path.isdir("/tmp/context_test"):
+            os.mkdir("/tmp/context_test")
+        TMP_FILE = "/tmp/context_test/temp.py"
+        shutil.copyfile(EXAMPLE_FILE, TMP_FILE)
+        self.contexts = context.main("bar", [".", "/tmp"], recursive=True)
+        self.assertAccurate(3,
+                            (self.EXAMPLE_FILE_RELPATH, self.THIS_FILE_RELPATH, TMP_FILE),
+                            "doesn't matter",
+                            (self.EXAMPLE_FILE_RELPATH, BAR_LINE_NOS),
+                            (TMP_FILE, BAR_LINE_NOS))
+        os.remove(TMP_FILE)
 
     def test_ignore_files_with_directory(self):
         self.contexts = context.main("bar", ["."], ignore=["example_files/"], recursive=True)
@@ -132,12 +142,13 @@ class TestMain(unittest.TestCase):
         """
         Takes optional number of tuple arguments in the form (key, value) to match in self.contexts
         """
+        should_have = should_have if type(should_have) is tuple else (should_have,)
+        should_not_have = should_not_have if type(should_not_have) is tuple else (should_not_have,)
         self.assertEqual(len(self.contexts), num_matches)
-        self.assertTrue(should_have in self.contexts)
-        self.assertFalse(should_not_have in self.contexts)
+        [self.assertTrue(i in self.contexts) for i in should_have]
+        [self.assertFalse(i in self.contexts) for i in should_not_have]
         if len(key_values) > 0:
             [self.assertEqual(self.contexts[k], v) for k, v in key_values]
-
 
 
 if __name__ == "__main__":
