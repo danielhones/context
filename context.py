@@ -162,8 +162,6 @@ def main(look_for, files, search_type=SEARCH_DEFAULT, recursive=False, ignore=IG
                     context = find_top_level(tree)
                 else:
                     context = find_context(tree, look_for, make_matcher(search_type, look_for))
-                if len(context) > 1:
-                    all_contexts[source_file] = context
             except KeyboardInterrupt as e:
                 sys.exit(1)
             except Exception as e:
@@ -171,8 +169,11 @@ def main(look_for, files, search_type=SEARCH_DEFAULT, recursive=False, ignore=IG
                 continue
             if len(context) == 0:
                 continue
+
             if recursive or len(files) > 1:
                 echo("\n{}".format(source_file))
+
+            all_contexts[source_file] = context
             echo("\n" + "".join([source.format_line(i) for i in context]))
 
     if verbose and skipped_files:
