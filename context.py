@@ -58,7 +58,7 @@ def make_matcher(search_type, look_for):
         try: lineno = node.lineno
         except: return None
         for attr in node._fields:
-            if type(look_for) is str and getattr(node, attr) == look_for:
+            if getattr(node, attr) == look_for:
                 return lineno       
 
     def _lineno(node):
@@ -194,7 +194,7 @@ if __name__ == "__main__":
                         help="search by line number")
     parser.add_argument("-e", "--search-regex", dest="search_type", action="store_const", const=SEARCH_REGEX,
                         help="search by regexp")
-    parser.add_argument("-d", "--definitions", dest="search_type", action="store_const", const=SEARCH_DEFINITIONS,
+    parser.add_argument("-d", "--search-defs", dest="search_type", action="store_const", const=SEARCH_DEFINITIONS,
                         help=("just look for class and function definitions.  The look_for argument "
                               "should be an integer indicating the maxmimum depth of search"))
     parser.add_argument("-v", "--verbose", action="store_true",
