@@ -88,56 +88,56 @@ class TestMain(unittest.TestCase):
         self.assertEqual(contexts[self.EXAMPLE_FILE_RELPATH], BAR_LINE_NOS)
 
     def test_recursive_current_dir_single_match(self):
-        contexts = context.main("TestCase", ["."], recursive=True)
-        self.assertEqual(len(contexts.keys()), 1)
-        self.assertTrue(self.THIS_FILE_RELPATH in contexts)
-        self.assertFalse(self.EXAMPLE_FILE_RELPATH in contexts)
+        self.contexts = context.main("TestCase", ["."], recursive=True)
+        self.assertAccurate(1, self.THIS_FILE_RELPATH, self.EXAMPLE_FILE_RELPATH)
+
+    @unittest.skip("skipping till test is written")
+    def test_recursive_multiple_directories(self):
+        pass
 
     def test_ignore_files_with_directory(self):
-        contexts = context.main("bar", ["."], ignore=["example_files/"], recursive=True)
-        self.assertEqual(len(contexts.keys()), 1)
-        self.assertTrue(self.THIS_FILE_RELPATH in contexts)
-        self.assertFalse(self.EXAMPLE_FILE_RELPATH in contexts)
+        self.contexts = context.main("bar", ["."], ignore=["example_files/"], recursive=True)
+        self.assertAccurate(1, self.THIS_FILE_RELPATH, self.EXAMPLE_FILE_RELPATH)
 
     def test_ignore_files_with_directory_and_filename(self):
-        contexts = context.main("bar", ["."], ignore=["example_files/example.py"], recursive=True)
-        self.assertEqual(len(contexts.keys()), 1)
-        self.assertTrue(self.THIS_FILE_RELPATH in contexts)
-        self.assertFalse(self.EXAMPLE_FILE_RELPATH in contexts)
+        for path in ["example_files/example.py", "./example_files/example.py"]:
+            self.contexts = context.main("bar", ["."], ignore=[path], recursive=True)
+            self.assertAccurate(1, self.THIS_FILE_RELPATH, self.EXAMPLE_FILE_RELPATH)
 
     def test_ignore_files_with_filename(self):
-        contexts = context.main("bar", ["."], ignore=["test.py"], recursive=True)
-        self.assertEqual(len(contexts.keys()), 1)
-        self.assertTrue(self.EXAMPLE_FILE_RELPATH in contexts)
-        self.assertFalse(self.THIS_FILE_RELPATH in contexts)
-        self.assertEqual(contexts[self.EXAMPLE_FILE_RELPATH], BAR_LINE_NOS)
+        self.contexts = context.main("bar", ["."], ignore=["test.py"], recursive=True)
+        self.assertAccurate(1, self.EXAMPLE_FILE_RELPATH, self.THIS_FILE_RELPATH, (self.EXAMPLE_FILE_RELPATH, BAR_LINE_NOS))
 
     def test_ignore_files_with_glob(self):
-        contexts = context.main("bar", ["."], ignore=["*est*"], recursive=True)
-        self.assertFalse(self.THIS_FILE_RELPATH in contexts)
-        self.assertTrue(self.EXAMPLE_FILE_RELPATH in contexts)
-        self.assertEqual(contexts[self.EXAMPLE_FILE_RELPATH], BAR_LINE_NOS)
+        self.contexts = context.main("bar", ["."], ignore=["*est*"], recursive=True)
+        self.assertAccurate(1, self.EXAMPLE_FILE_RELPATH, self.THIS_FILE_RELPATH, (self.EXAMPLE_FILE_RELPATH, BAR_LINE_NOS))
 
     def test_search_default(self):
-        contexts = context.main("bar", [EXAMPLE_FILE])
-        self.assertEqual(list(contexts.keys()), [EXAMPLE_FILE])
-        self.assertEqual(contexts[EXAMPLE_FILE], BAR_LINE_NOS)
+        self.contexts = context.main("bar", [EXAMPLE_FILE])
+        self.assertAccurate(1, EXAMPLE_FILE, "doesn't matter", (EXAMPLE_FILE, BAR_LINE_NOS))
 
     def test_search_regex(self):
-        contexts = context.main("bar", [EXAMPLE_FILE])
-        self.assertEqual(list(contexts.keys()), [EXAMPLE_FILE])
-        self.assertEqual(contexts[EXAMPLE_FILE], BAR_LINE_NOS)
+        self.contexts = context.main("bar", [EXAMPLE_FILE])
+        self.assertAccurate(1, EXAMPLE_FILE, "doesn't matter", (EXAMPLE_FILE, BAR_LINE_NOS))
 
     def test_search_lineno(self):
-        contexts = context.main("17", [EXAMPLE_FILE], SEARCH_LINENO)
-        self.assertEqual(list(contexts.keys()), [EXAMPLE_FILE])
-        self.assertEqual(contexts[EXAMPLE_FILE], [4, 14, 16, 17])
+        self.contexts = context.main("17", [EXAMPLE_FILE], SEARCH_LINENO)
+        self.assertAccurate(1, EXAMPLE_FILE, "doesn't matter", (EXAMPLE_FILE, [4, 14, 16, 17]))
 
     def test_definitions(self):
-        contexts = context.main("doesn't matter currently", [EXAMPLE_FILE], SEARCH_DEFINITIONS)
-        self.assertEqual(len(contexts.keys()), 1)
-        self.assertTrue(EXAMPLE_FILE in contexts)
-        self.assertEqual(contexts[EXAMPLE_FILE], [4, 21])
+        self.contexts = context.main("doesn't matter", [EXAMPLE_FILE], SEARCH_DEFINITIONS)
+        self.assertAccurate(1, EXAMPLE_FILE, "doesn't matter", (EXAMPLE_FILE, [4, 21]))
+
+    def assertAccurate(self, num_matches, should_have, should_not_have, *key_values):
+        """
+        Takes optional number of tuple arguments in the form (key, value) to match in self.contexts
+        """
+        self.assertEqual(len(self.contexts), num_matches)
+        self.assertTrue(should_have in self.contexts)
+        self.assertFalse(should_not_have in self.contexts)
+        if len(key_values) > 0:
+            [self.assertEqual(self.contexts[k], v) for k, v in key_values]
+
 
 
 if __name__ == "__main__":

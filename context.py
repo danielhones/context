@@ -3,6 +3,7 @@ import ast
 import argparse
 import sys
 import os
+import glob
 import re
 
 
@@ -139,13 +140,17 @@ def main(look_for, files, search_type=SEARCH_DEFAULT, recursive=False, ignore=IG
 
     for (directory, _, filenames) in files:
         abspath = os.path.abspath(directory)
-        ignore = [os.path.abspath(i) for i in ignore]
-        if abspath in ignore:
+
+        current_ignore = []
+        for i in ignore:
+            current_ignore.extend(glob.glob(os.path.abspath(i)))
+
+        if abspath in current_ignore:
             continue
         for fn in filenames:
-            if os.path.abspath(fn) in ignore:
-                continue
             source_file = os.path.join(directory, fn)
+            if os.path.abspath(source_file) in current_ignore or source_file in current_ignore:
+                continue
             try:
                 source = SourceCode(source_file)
                 tree = parse_source(source_file)
