@@ -64,6 +64,11 @@ def make_matcher(search_type, look_for):
         except: return None
         return lineno if lineno == look_for else None
 
+    # Convert look_for to the type that the matcher functions need.
+    # Doing it here rather than inside the matcher function because it only needs to happen once
+    look_for = {SEARCH_DEFAULT: lambda x: x,
+                SEARCH_LINENO: int,
+                SEARCH_REGEX: re.compile}[search_type](look_for)
     return {SEARCH_DEFAULT: _default,
             SEARCH_LINENO: _lineno,
             SEARCH_REGEX: _regex}[search_type]
@@ -127,11 +132,6 @@ def main(look_for, files, search_type=SEARCH_DEFAULT, recursive=False,
     """
     search_type can be default|lineno|regex
     """
-    if search_type == SEARCH_REGEX:
-        look_for = re.compile(look_for)
-    elif search_type == SEARCH_LINENO:
-        look_for = int(look_for)
-
     if recursive:
         files = os.walk(files)
     else:

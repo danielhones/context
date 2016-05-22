@@ -18,7 +18,7 @@ class TestMakeMatcher(unittest.TestCase):
         self.node = ast.Name(id="get_files", ctx=ast.Store(), lineno=23, col_offset=4)
 
     def test_search_regex(self):
-        matcher = make_matcher(SEARCH_REGEX, re.compile(r"get_fi[a-z]{2,3}"))
+        matcher = make_matcher(SEARCH_REGEX, "get_fi[a-z]{2,3}")
         self.assertTrue(matcher(self.node))
 
     def test_search_default(self):
@@ -26,7 +26,7 @@ class TestMakeMatcher(unittest.TestCase):
         self.assertTrue(matcher(self.node))
 
     def test_search_lineno(self):
-        matcher = make_matcher(SEARCH_LINENO, self.node.lineno)
+        matcher = make_matcher(SEARCH_LINENO, str(self.node.lineno))
         self.assertTrue(matcher(self.node))
 
 
