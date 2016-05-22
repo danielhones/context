@@ -99,6 +99,12 @@ class TestMain(unittest.TestCase):
         self.assertTrue(self.THIS_FILE_RELPATH in contexts)
         self.assertFalse(self.EXAMPLE_FILE_RELPATH in contexts)
 
+    def test_ignore_files_with_directory_and_filename(self):
+        contexts = context.main("bar", ["."], ignore=["example_files/example.py"], recursive=True)
+        self.assertEqual(len(contexts.keys()), 1)
+        self.assertTrue(self.THIS_FILE_RELPATH in contexts)
+        self.assertFalse(self.EXAMPLE_FILE_RELPATH in contexts)
+
     def test_ignore_files_with_filename(self):
         contexts = context.main("bar", ["."], ignore=["test.py"], recursive=True)
         self.assertEqual(len(contexts.keys()), 1)
