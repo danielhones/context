@@ -7,7 +7,7 @@ import re
 
 
 IGNORE_DIRECTORIES = ["__pycache__", ".git"]
-SEARCH_DEFAULT, SEARCH_LINENO, SEARCH_REGEX = range(3)
+SEARCH_DEFAULT, SEARCH_LINENO, SEARCH_REGEX, SEARCH_DEFINITIONS = range(4)
 
 
 def echo(*args):
@@ -127,10 +127,14 @@ def parse_source(filename):
     return tree
 
 
-def main(look_for, files, search_type=SEARCH_DEFAULT, recursive=False,
-         ignore=IGNORE_DIRECTORIES, verbose=False, definitions=False):
+def main(look_for, files, search_type=SEARCH_DEFAULT, recursive=False, ignore=IGNORE_DIRECTORIES, verbose=False):
+    """
+    look_for is a string, files is a list of paths
+    """
 
-    files = os.walk(files) if recursive else [(os.curdir, [], [f]) for f in files]  # format returned by os.walk
+    # TODO: make recursive handle multiple directories, make sure ignore works right
+    files = os.walk(files[0]) if recursive else [(os.curdir, [], [f]) for f in files]  # format returned by os.walk
+    all_contexts = {}
     skipped_files = {}
 
     for (directory, _, filenames) in files:
@@ -145,10 +149,12 @@ def main(look_for, files, search_type=SEARCH_DEFAULT, recursive=False,
             try:
                 source = SourceCode(source_file)
                 tree = parse_source(source_file)
-                if definitions:
+                if search_type == SEARCH_DEFINITIONS:
                     context = find_top_level(tree)
                 else:
                     context = find_context(tree, look_for, make_matcher(search_type, look_for))
+                if len(context) > 1:
+                    all_contexts[source_file] = context
             except KeyboardInterrupt as e:
                 sys.exit(1)
             except Exception as e:
@@ -164,6 +170,9 @@ def main(look_for, files, search_type=SEARCH_DEFAULT, recursive=False,
         echo("Skipped these files due to errors:\n{}".format(
             "\n".join(["{}: {}".format(key, skipped_files[key]) for key in skipped_files])))
 
+    # to make testing easier, don't have to capture and parse stdout:
+    return all_contexts
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -176,14 +185,14 @@ if __name__ == "__main__":
                         help="search by line number")
     parser.add_argument("-e", "--search-regex", dest="search_type", action="store_const", const=SEARCH_REGEX,
                         help="search by regexp")
+    parser.add_argument("-d", "--definitions", dest="search_type", action="store_const", const=SEARCH_DEFINITIONS,
+                        help=("just look for class and function definitions.  The look_for argument "
+                              "should be an integer indicating the maxmimum depth of search"))
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="display information about errors and skipped files")
     parser.add_argument("-i", "--ignore",
                         help=("comma-separated list of files and directories "
                               "to ignore, default is {}".format(IGNORE_DIRECTORIES)))
-    parser.add_argument("-d", "--definitions", action="store_true",
-                        help=("just look for class and function defintions.  The look_for argument "
-                              "should be an integer indicating the maxmimum depth of search"))
     args = parser.parse_args()
 
     if args.ignore:
@@ -196,5 +205,4 @@ if __name__ == "__main__":
          search_type=args.search_type or SEARCH_DEFAULT,
          recursive=args.recursive,
          ignore=ignore,
-         verbose=args.verbose,
-         definitions=args.definitions)
+         verbose=args.verbose)
