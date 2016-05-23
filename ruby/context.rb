@@ -1,6 +1,12 @@
 #!/usr/bin/env ruby
-require 'parser'
+require 'ripper'
+require 'stringio'
+require 'pp'
 require 'optparse'
+
+oldstderr, $stderr = $stderr, StringIO.new  # suppress warnings
+require 'parser/current'
+$stderr = oldstderr
 
 
 SEARCH_DEFAULT, SEARCH_LINENO, SEARCH_REGEX, SEARCH_DEFINITIONS = (0..3).to_a
@@ -35,25 +41,13 @@ def make_matcher(search_type, look_for)
     look_for = look_for.to_i
   end
 
-  _default = Proc.new do |node|
-    begin
-      lineno = node.lineno
-    rescue
-      return nil
-    end
-    node._fields.each do |attr|
-      if getattr(node, attr) == look_for
-        return lineno
-      end
+  _default = lambda do |node, lineno|
+    if node.respond_to?(:children) && node.children.map(&:to_s).include?(look_for)
+      return lineno
     end
   end
 
-  _regex = Proc.new do |node|
-    begin
-      lineno = node.lineno
-    rescue
-      return nil
-    end
+  _regex = Proc.new do |node, lineno|
     node._fields.each do |attr|
       begin
         return lineno if look_for.match(getattr(node, attr))
@@ -62,13 +56,8 @@ def make_matcher(search_type, look_for)
     end
   end
 
-  _lineno = Proc.new do |node|
-    begin
-      lineno = node.lineno
-    rescue
-      return nil
-    end
-    return lineno if lineno == look_for else None
+  _lineno = Proc.new do |node, lineno|
+    return lineno == look_for ? lineno : nil
   end
 
   {SEARCH_DEFAULT => _default,
@@ -78,7 +67,29 @@ end
 
 
 def walk(node, matcher, history=nil)
+  history = history.nil? ? [] : history.dup.uniq
+  matches = []
 
+  lineno = node.location.line rescue nil
+  match = matcher.call(node, lineno)
+  if match
+    matches.push(match)
+    matches = (matches + history).uniq
+  end
+ 
+  if !node.is_a?(AST::Node) || node.children.nil? || node.children.length == 0
+    return matches.uniq
+  end
+
+  history.push(lineno)
+  node.children.each do |child|
+    history.push(child.location.line) rescue nil
+    matches += walk(child, matcher, history)
+    history.pop
+  end
+  history.pop
+  puts "history = #{history}, matches = #{matches}"
+  return matches.compact.sort.uniq
 end
 
   
@@ -86,19 +97,9 @@ def find_top_level(tree, depth=1)
 end
 
 
-def find_context(tree, look_for, matcher)
-end
-
-
-def parse_source(filename)
-end
-
-
 def main(look_for, files, search_type=SEARCH_DEFAULT, recursive=false, ignore=IGNORE_DIRECTORIES, verbose=false)
 
   # check for recursive, walk files/directories
-
-  
   all_contexts = {}
   skipped_files = {}
   
@@ -106,17 +107,18 @@ def main(look_for, files, search_type=SEARCH_DEFAULT, recursive=false, ignore=IG
     source_file = f  # grab absolute path here
     begin
       source = SourceCode.new(source_file)
-      tree = parse_source(source_file)
+      tree = Parser::CurrentRuby.parse_file(source_file)
+
       if search_type == SEARCH_DEFINITIONS
         context = find_top_level(tree)
       else
-        context = find_context(tree, look_for, make_matcher(search_type, look_for))
+        context = walk(tree, make_matcher(search_type, look_for))
       end
     rescue SystemExit, Interrupt
       raise
-    rescue Exception => e
-      skipped_files[source_file] = e.inspect
-      next
+    # rescue Exception => e
+    #   skipped_files[source_file] = e.inspect
+    #   next
     end
     next if context.length == 0
 
@@ -125,7 +127,7 @@ def main(look_for, files, search_type=SEARCH_DEFAULT, recursive=false, ignore=IG
     context.each { |lineno| puts source.format_line(lineno) }
   end
 
-  if verbose || skipped_files.length > 0
+  if verbose && skipped_files.length > 0
     puts "Skipped these files due to errors:"
     skipped_files.each { |k, v| puts "#{k}:  #{v}" }
   end

@@ -21,7 +21,7 @@ class FooClass:
 def main():
     foo = FooClass(2, 3)
     foo.bar()
-    foo.a == foo.b
+    foo.a = foo.b
     foo.baz()
 
 
