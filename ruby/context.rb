@@ -47,7 +47,7 @@ def make_matcher(search_type, look_for)
     end
   end
 
-  _regex = Proc.new do |node, lineno|
+  _regex = lambda do |node, lineno|
     node._fields.each do |attr|
       begin
         return lineno if look_for.match(getattr(node, attr))
@@ -56,7 +56,7 @@ def make_matcher(search_type, look_for)
     end
   end
 
-  _lineno = Proc.new do |node, lineno|
+  _lineno = lambda do |node, lineno|
     return lineno == look_for ? lineno : nil
   end
 
@@ -88,7 +88,7 @@ def walk(node, matcher, history=nil)
     history.pop
   end
   history.pop
-  puts "history = #{history}, matches = #{matches}"
+
   return matches.compact.sort.uniq
 end
 
@@ -98,6 +98,7 @@ end
 
 
 def main(look_for, files, search_type=SEARCH_DEFAULT, recursive=false, ignore=IGNORE_DIRECTORIES, verbose=false)
+  # TODO: get this working for recursive option
 
   # check for recursive, walk files/directories
   all_contexts = {}
@@ -116,9 +117,6 @@ def main(look_for, files, search_type=SEARCH_DEFAULT, recursive=false, ignore=IG
       end
     rescue SystemExit, Interrupt
       raise
-    # rescue Exception => e
-    #   skipped_files[source_file] = e.inspect
-    #   next
     end
     next if context.length == 0
 
@@ -152,11 +150,14 @@ if __FILE__ == $0
     opts.on("-i IGNORE", "--ignore IGNORE", "comma-separated list of files and directories to ignore") { |v|
       options[:ignore] = IGNORE_DIRECTORIES + v.split(",")
     }
+    if ARGV[0].nil? || ARGV[1].nil?
+      puts opts; exit
+    end
   end.parse!
 
   look_for = ARGV[0]
   paths = ARGV.slice(1,ARGV.length)
-    
+
   main(look_for,
        paths,
        options[:search_type] || SEARCH_DEFAULT,
