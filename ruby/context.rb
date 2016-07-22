@@ -13,11 +13,20 @@ SEARCH_DEFAULT, SEARCH_LINENO, SEARCH_REGEX, SEARCH_DEFINITIONS = (0..3).to_a
 IGNORE_DIRECTORIES = [".git"]
 
 
+def make_colorizer(color)
+  endcolor= "[0m"
+  color = "[31m"  # obviously fill in real color code here
+  lambda { |string| "\e#{color}" + string + "\e#{endcolor}" }
+end
+
+
 class SourceCode
-  def initialize(filename, offset=1)
+  def initialize(filename, look_for=nil, offset=1, num_color=nil, line_color=nil)
     @filename = filename
     @offset = offset
     @lines = File.readlines(filename)
+    @number_colorizer = num_color.nil? ? lambda { |x| x } : make_colorizer(num_color)
+    @line_colorizer = line_color.nil? ? lambda { |x| x } : make_colorizer(line_color)
   end
 
   def line(lineno)
@@ -29,7 +38,9 @@ class SourceCode
   end
 
   def format_line(lineno)
-    "#{lineno.to_s.rjust(numlines.to_s.length)}:  #{line(lineno)}"
+    formatted_lineno = @number_colorizer.call( lineno.to_s.rjust(numlines.to_s.length) )
+    formatted_line = @line_colorizer.call( line(lineno) )
+    "#{formatted_lineno}:  #{formatted_line}"
   end
 end
 
