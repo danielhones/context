@@ -10,25 +10,35 @@ $stderr = oldstderr
 
 
 SEARCH_DEFAULT, SEARCH_LINENO, SEARCH_REGEX, SEARCH_DEFINITIONS = (0..3).to_a
+DEFAULT_NUM_COLOR = "blue"
+DEFAULT_LINE_COLOR = "red"
 IGNORE_DIRECTORIES = [".git"]
 
 
-def make_colorizer(color)
-  endcolor= "[0m"
-  color = "[31m"  # obviously fill in real color code here
-  lambda { |string| "\e#{color}" + string + "\e#{endcolor}" }
+def make_formatter(format)
+  # format should be a terminal color/format like "[1m[31m" for bold red
+  endformat = "[0m"
+  lambda { |string| "\e#{format}" + string + "\e#{endformat}" }
 end
 
 
 class SourceCode
-  def initialize(filename, look_for=nil, offset=1, num_color=nil, line_color=nil)
+  def initialize(filename, :look_for => nil, offset => 1, num_format => nil, line_format => nil)
     @filename = filename
     @offset = offset
     @lines = File.readlines(filename)
-    @number_colorizer = num_color.nil? ? lambda { |x| x } : make_colorizer(num_color)
-    @line_colorizer = line_color.nil? ? lambda { |x| x } : make_colorizer(line_color)
+    @look_for = look_for
+    @number_formatter = num_format.nil ? make_formatter(num_format) : lambda { |x| x }
+    @line_formatter = (look_for && line_format) ? make_line_formatter(line_format) : lambda { |x| x }
   end
 
+  def make_line_formatter(format)
+    formatted_lookfor = make_formatter(format).call(look_for)
+    lambda do |string|
+      string.gsub(Regexp.new(look_for), formatted_lookfor)
+    end
+  end
+  
   def line(lineno)
     @lines[lineno - @offset]
   end
@@ -38,8 +48,8 @@ class SourceCode
   end
 
   def format_line(lineno)
-    formatted_lineno = @number_colorizer.call( lineno.to_s.rjust(numlines.to_s.length) )
-    formatted_line = @line_colorizer.call( line(lineno) )
+    formatted_lineno = @number_formatter.call( lineno.to_s.rjust(numlines.to_s.length) )
+    formatted_line = @line_formatter.call( line(lineno) )
     "#{formatted_lineno}:  #{formatted_line}"
   end
 end
