@@ -29,8 +29,8 @@ class SourceCode
   end
   
   def add_line_color(line)
-    #formatted_lookfor = make_formatter(format).call(@look_for)
-    #string.gsub(Regexp.new(@look_for), formatted_lookfor)
+    # TODO: this doesn't work right with regexps because it colors the regex itself, not
+    # the string it matched in the line.
     colored_look_for = @line_color + @look_for + @end_color
     line.gsub(Regexp.new(@look_for), colored_look_for)
   end
@@ -62,6 +62,8 @@ def make_matcher(search_type, look_for)
     look_for = look_for.to_i
   end
 
+  # TODO: both _default and _regex should probably use just one call to any? instead of
+  # map.include? and map.any?
   _default = lambda do |node, lineno|
     if node.respond_to?(:children) && node.children.map(&:to_s).include?(look_for)
       return lineno
@@ -69,11 +71,8 @@ def make_matcher(search_type, look_for)
   end
 
   _regex = lambda do |node, lineno|
-    node._fields.each do |attr|
-      begin
-        return lineno if look_for.match(getattr(node, attr))
-      rescue
-      end
+    if node.respond_to?(:children) && node.children.map(&:to_s).any?{ |s| look_for =~ s }
+      return lineno
     end
   end
 
