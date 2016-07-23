@@ -10,7 +10,7 @@ require 'parser/current'
 $stderr = oldstderr
 
 
-SEARCH_DEFAULT, SEARCH_LINENO, SEARCH_REGEX, SEARCH_DEFINITIONS = (0..3).to_a
+SEARCH_DEFAULT, SEARCH_LINENO, SEARCH_REGEX = (0..2).to_a
 IGNORE_DIRECTORIES = [".git"]
 BLUE = "\e[34m"
 LIGHT_GREEN =  "\e[92m"
@@ -113,10 +113,6 @@ def walk(node, matcher, history=nil)
 end
 
   
-def find_top_level(tree, depth=1)
-end
-
-
 def main(look_for, files, search_type: SEARCH_DEFAULT, recursive: false,
          ignore: IGNORE_DIRECTORIES, verbose: false, color: false)
   num_color = color ? BLUE : nil
@@ -135,33 +131,28 @@ def main(look_for, files, search_type: SEARCH_DEFAULT, recursive: false,
   end
 
   files.each do |f|
-    source_file = f  # grab absolute path here
+    source_file = f
     context = []
     begin
       source = SourceCode.new(source_file, look_for: look_for, num_color: num_color, line_color: line_color)
       tree = Parser::CurrentRuby.parse_file(source_file)
-
-      if search_type == SEARCH_DEFINITIONS
-        context = find_top_level(tree)
-      else
-        context = walk(tree, make_matcher(search_type, look_for))
-      end
+      context = walk(tree, make_matcher(search_type, look_for))
     rescue SystemExit, Interrupt
       raise
     rescue => e
-      skipped_files[f] = e
+      skipped_files[f] = e.inspect + "\n#{e.backtrace.join("\n")}"
     end
     next if context.length == 0
 
+    puts ""
     puts source_file if recursive || files.length > 1
-
     context.each { |lineno| puts source.format_line(lineno) }
     puts ""
   end
 
   if verbose && skipped_files.length > 0
-    puts "Skipped these files due to errors:"
-    skipped_files.each { |k, v| puts "#{k}:  #{v}" }
+    puts "\nSkipped these files due to errors:"
+    skipped_files.each { |k, v| puts "#{k}:  #{v}\n\n" }
   end
   return all_contexts
 end
@@ -171,27 +162,29 @@ if __FILE__ == $0
   options = {}
   OptionParser.new do |opts|
     opts.set_banner("Find lines in a Ruby source file and the context they're in\n\n" +
-                    "Usage: #{$0} [options] look_for paths [paths...]\n\n" +
+                    "Usage: #{$0} [options] look_for [paths]\n" +
                     "Options:\n")
     opts.on("-v", "--verbose", "display information about errors and skipped files") { |v| options[:verbose] = true }
     opts.on("-r", "--recursive", "recursively search directory") { |v| options[:recursive] = true }
     opts.on("-n", "--search-line", "search by line number") { |v| options[:search_type] = SEARCH_LINENO }
     opts.on("-e", "--search-regex", "search by regular expression") { |v| options[:search_type] = SEARCH_REGEX }
     opts.on("-c", "--color", "highlight line numbers and matches") { |v| options[:color] = true }
-    opts.on("-d", "--search-defs", "look for class, module, and function definitions") { |v|
-      options[:search_type] = SEARCH_DEFINITIONS
-    }
     opts.on("-h", "--help", "print this help") { puts opts; exit }
     opts.on("-i IGNORE", "--ignore IGNORE", "comma-separated list of files and directories to ignore") { |v|
       options[:ignore] = IGNORE_DIRECTORIES + v.split(",")
     }
-    if ARGV[0].nil? || ARGV[1].nil?
+    if ARGV[0].nil?
       puts opts; exit
     end
   end.parse!
 
   look_for = ARGV[0]
-  paths = ARGV.slice(1, ARGV.length)
+  if ARGV.length > 1
+    paths = ARGV.slice(1, ARGV.length)
+  else
+    # TODO: not working yet, but make it read from stdin if there are no filenames passed as arguments
+    paths = $stdin
+  end
 
   main(look_for, paths,
        search_type: options[:search_type] || SEARCH_DEFAULT,
