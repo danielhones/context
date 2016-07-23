@@ -140,7 +140,11 @@ def main(look_for, files, search_type: SEARCH_DEFAULT, recursive: false,
     rescue SystemExit, Interrupt
       raise
     rescue => e
-      skipped_files[f] = e.inspect + "\n#{e.backtrace.join("\n")}"
+      if verbose == 1
+        skipped_files[f] = e.inspect
+      elsif verbose == 2
+        skipped_files[f] = e.inspect + "\n#{e.backtrace.join("\n")}\n\n"
+      end
     end
     next if context.length == 0
 
@@ -150,21 +154,21 @@ def main(look_for, files, search_type: SEARCH_DEFAULT, recursive: false,
     puts ""
   end
 
-  if verbose && skipped_files.length > 0
-    puts "\nSkipped these files due to errors:"
-    skipped_files.each { |k, v| puts "#{k}:  #{v}\n\n" }
+  if verbose > 0 && skipped_files.length > 0
+    puts "Skipped these files due to errors:"
+    skipped_files.each { |k, v| puts "#{k}:  #{v}" }
   end
   return all_contexts
 end
 
 
 if __FILE__ == $0
-  options = {}
+  options = {:verbose => 0}
   OptionParser.new do |opts|
     opts.set_banner("Find lines in a Ruby source file and the context they're in\n\n" +
                     "Usage: #{$0} [options] look_for [paths]\n" +
                     "Options:\n")
-    opts.on("-v", "--verbose", "display information about errors and skipped files") { |v| options[:verbose] = true }
+    opts.on("-v", "--verbose", "display information about errors and skipped files") { |v| options[:verbose] += 1 }
     opts.on("-r", "--recursive", "recursively search directory") { |v| options[:recursive] = true }
     opts.on("-n", "--search-line", "search by line number") { |v| options[:search_type] = SEARCH_LINENO }
     opts.on("-e", "--search-regex", "search by regular expression") { |v| options[:search_type] = SEARCH_REGEX }
