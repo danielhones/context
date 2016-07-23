@@ -159,7 +159,7 @@ def main(look_for, files, search_type: SEARCH_DEFAULT, recursive: false,
     context.each { |lineno| puts source.format_line(lineno) }
     puts ""
   end
-  
+
   if verbose && skipped_files.length > 0
     puts "Skipped these files due to errors:"
     skipped_files.each { |k, v| puts "#{k}:  #{v}" }
