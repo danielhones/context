@@ -3,6 +3,7 @@ require 'ripper'
 require 'stringio'
 require 'pp'
 require 'optparse'
+require 'find'
 
 oldstderr, $stderr = $stderr, StringIO.new  # suppress warnings
 require 'parser/current'
@@ -119,16 +120,24 @@ end
 
 def main(look_for, files, search_type: SEARCH_DEFAULT, recursive: false,
          ignore: IGNORE_DIRECTORIES, verbose: false, color: false)
-  # TODO: get this working for recursive option
   num_color = color ? BLUE : nil
   line_color = color ? LIGHT_GREEN : nil
 
   # check for recursive, walk files/directories
   all_contexts = {}
   skipped_files = {}
-  
+
+  if recursive
+    files = files.map{ |dir|
+      Find.find(dir).map { |f|
+        File.expand_path(f, Dir.getwd)
+      }
+    }.flatten
+  end
+
   files.each do |f|
     source_file = f  # grab absolute path here
+    context = []
     begin
       source = SourceCode.new(source_file, look_for: look_for, num_color: num_color, line_color: line_color)
       tree = Parser::CurrentRuby.parse_file(source_file)
@@ -140,14 +149,17 @@ def main(look_for, files, search_type: SEARCH_DEFAULT, recursive: false,
       end
     rescue SystemExit, Interrupt
       raise
+    rescue => e
+      skipped_files[f] = e
     end
     next if context.length == 0
 
     puts source_file if recursive || files.length > 1
 
     context.each { |lineno| puts source.format_line(lineno) }
+    puts ""
   end
-
+  
   if verbose && skipped_files.length > 0
     puts "Skipped these files due to errors:"
     skipped_files.each { |k, v| puts "#{k}:  #{v}" }
@@ -180,7 +192,7 @@ if __FILE__ == $0
   end.parse!
 
   look_for = ARGV[0]
-  paths = ARGV.slice(1,ARGV.length)
+  paths = ARGV.slice(1, ARGV.length)
 
   main(look_for, paths,
        search_type: options[:search_type] || SEARCH_DEFAULT,
