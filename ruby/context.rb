@@ -10,33 +10,32 @@ $stderr = oldstderr
 
 
 SEARCH_DEFAULT, SEARCH_LINENO, SEARCH_REGEX, SEARCH_DEFINITIONS = (0..3).to_a
-DEFAULT_NUM_COLOR = "blue"
-DEFAULT_LINE_COLOR = "red"
 IGNORE_DIRECTORIES = [".git"]
-
-
-def make_formatter(format)
-  # format should be a terminal color/format like "[1m[31m" for bold red
-  endformat = "[0m"
-  lambda { |string| "\e#{format}" + string + "\e#{endformat}" }
-end
+BLUE = "\e[34m"
+LIGHT_GREEN =  "\e[92m"
+END_COLOR = "\e[0m"
 
 
 class SourceCode
-  def initialize(filename, :look_for => nil, offset => 1, num_format => nil, line_format => nil)
+  def initialize(filename, look_for: nil, num_color: nil, line_color: nil, offset: 1)
     @filename = filename
     @offset = offset
     @lines = File.readlines(filename)
     @look_for = look_for
-    @number_formatter = num_format.nil ? make_formatter(num_format) : lambda { |x| x }
-    @line_formatter = (look_for && line_format) ? make_line_formatter(line_format) : lambda { |x| x }
+    @num_color = num_color || ""
+    @line_color = line_color || ""
+    @end_color = (num_color || line_color) ? END_COLOR : ""
+  end
+  
+  def add_line_color(line)
+    #formatted_lookfor = make_formatter(format).call(@look_for)
+    #string.gsub(Regexp.new(@look_for), formatted_lookfor)
+    colored_look_for = @line_color + @look_for + @end_color
+    line.gsub(Regexp.new(@look_for), colored_look_for)
   end
 
-  def make_line_formatter(format)
-    formatted_lookfor = make_formatter(format).call(look_for)
-    lambda do |string|
-      string.gsub(Regexp.new(look_for), formatted_lookfor)
-    end
+  def add_num_color(lineno)
+    @num_color + lineno + @end_color
   end
   
   def line(lineno)
@@ -48,9 +47,9 @@ class SourceCode
   end
 
   def format_line(lineno)
-    formatted_lineno = @number_formatter.call( lineno.to_s.rjust(numlines.to_s.length) )
-    formatted_line = @line_formatter.call( line(lineno) )
-    "#{formatted_lineno}:  #{formatted_line}"
+    colored_lineno = add_num_color( lineno.to_s.rjust(numlines.to_s.length) )
+    colored_line = add_line_color( line(lineno) )
+    "#{colored_lineno}:  #{colored_line}"
   end
 end
 
@@ -118,8 +117,11 @@ def find_top_level(tree, depth=1)
 end
 
 
-def main(look_for, files, search_type=SEARCH_DEFAULT, recursive=false, ignore=IGNORE_DIRECTORIES, verbose=false)
+def main(look_for, files, search_type: SEARCH_DEFAULT, recursive: false,
+         ignore: IGNORE_DIRECTORIES, verbose: false, color: false)
   # TODO: get this working for recursive option
+  num_color = color ? BLUE : nil
+  line_color = color ? LIGHT_GREEN : nil
 
   # check for recursive, walk files/directories
   all_contexts = {}
@@ -128,7 +130,7 @@ def main(look_for, files, search_type=SEARCH_DEFAULT, recursive=false, ignore=IG
   files.each do |f|
     source_file = f  # grab absolute path here
     begin
-      source = SourceCode.new(source_file)
+      source = SourceCode.new(source_file, look_for: look_for, num_color: num_color, line_color: line_color)
       tree = Parser::CurrentRuby.parse_file(source_file)
 
       if search_type == SEARCH_DEFINITIONS
@@ -164,6 +166,7 @@ if __FILE__ == $0
     opts.on("-r", "--recursive", "recursively search directory") { |v| options[:recursive] = true }
     opts.on("-n", "--search-line", "search by line number") { |v| options[:search_type] = SEARCH_LINENO }
     opts.on("-e", "--search-regex", "search by regular expression") { |v| options[:search_type] = SEARCH_REGEX }
+    opts.on("-c", "--color", "highlight line numbers and matches") { |v| options[:color] = true }
     opts.on("-d", "--search-defs", "look for class, module, and function definitions") { |v|
       options[:search_type] = SEARCH_DEFINITIONS
     }
@@ -179,10 +182,10 @@ if __FILE__ == $0
   look_for = ARGV[0]
   paths = ARGV.slice(1,ARGV.length)
 
-  main(look_for,
-       paths,
-       options[:search_type] || SEARCH_DEFAULT,
-       options[:recursive],
-       options[:ignore],
-       options[:verbose])
+  main(look_for, paths,
+       search_type: options[:search_type] || SEARCH_DEFAULT,
+       recursive: options[:recursive],
+       ignore: options[:ignore],
+       verbose: options[:verbose],
+       color: options[:color])
 end
