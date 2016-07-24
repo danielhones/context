@@ -10,6 +10,9 @@ import itertools
 
 IGNORE_DIRECTORIES = ["__pycache__", ".git"]
 SEARCH_DEFAULT, SEARCH_LINENO, SEARCH_REGEX, SEARCH_DEFINITIONS = range(4)
+BLUE = "\033[34m"
+LIGHT_GREEN =  "\033[92m"
+END_COLOR = "\033[0m"
 
 
 def echo(*args):
@@ -19,13 +22,17 @@ def echo(*args):
 
 
 class SourceCode(object):
-    def __init__(self, filename, offset=1):
+    def __init__(self, filename, look_for=None, num_color=None, line_color=None, offset=1):
         """
         offset is the difference between the number of the first line of the file and 0.  It's probably 1.
         """
         self.offset = offset
         self.filename = filename
         self.lines = []
+        self.look_for = look_for
+        self.num_color = num_color or ""
+        self.line_color = line_color or ""
+        self.end_color = END_COLOR if (num_color or line_color) else ""
         with open(filename, "r") as f:
             self.lines = f.readlines()
 
@@ -39,8 +46,19 @@ class SourceCode(object):
     def numlines(self):
         return len(self.lines)
 
+    def add_line_color(self, line):
+        # TODO: this doesn't work right with regexps because it colors the regex itself, not
+        # the string it matched in the line (same as Ruby version just copied here)
+        colored_look_for = self.line_color + self.look_for + self.end_color
+        return line.replace(self.look_for, colored_look_for)
+
+    def add_num_color(self, lineno):
+        return self.num_color + lineno + self.end_color
+
     def format_line(self, lineno):
-        return "{}:  {}".format(str(lineno).rjust(len(str(self.numlines))), self.line(lineno))
+        colored_num = self.add_num_color(str(lineno).rjust(len(str(self.numlines))))
+        colored_line = self.add_line_color(self.line(lineno))
+        return "{}:  {}".format(colored_num, colored_line)
 
 
 def make_matcher(search_type, look_for):
@@ -129,10 +147,13 @@ def parse_source(filename):
     return tree
 
 
-def main(look_for, files, search_type=SEARCH_DEFAULT, recursive=False, ignore=IGNORE_DIRECTORIES, verbose=False):
+def main(look_for, files, search_type=SEARCH_DEFAULT, recursive=False,
+         ignore=IGNORE_DIRECTORIES, verbose=False, color=False):
     """
     look_for is a string, files is a list of paths
     """
+    num_color = BLUE if color else None
+    line_color = LIGHT_GREEN if color else None
     if recursive:
         files = itertools.chain(*[os.walk(f) for f in files])
     else:
@@ -156,7 +177,7 @@ def main(look_for, files, search_type=SEARCH_DEFAULT, recursive=False, ignore=IG
             if os.path.abspath(source_file) in current_ignore or source_file in current_ignore:
                 continue
             try:
-                source = SourceCode(source_file)
+                source = SourceCode(source_file, look_for=look_for, num_color=num_color, line_color=line_color)
                 tree = parse_source(source_file)
                 if search_type == SEARCH_DEFINITIONS:
                     context = find_top_level(tree)
@@ -191,6 +212,7 @@ if __name__ == "__main__":
     parser.add_argument("look_for", help="object to look for in the file")
     parser.add_argument("paths", help="files (or directories if -r option) to look in", nargs="+")
     parser.add_argument("-r", "--recursive", action="store_true", help="recursively search directory")
+    parser.add_argument("-c", "--color", action="store_true", help="colorize output")
     parser.add_argument("-n", "--search-line", dest="search_type", action="store_const", const=SEARCH_LINENO,
                         help="search by line number")
     parser.add_argument("-e", "--search-regex", dest="search_type", action="store_const", const=SEARCH_REGEX,
@@ -215,4 +237,5 @@ if __name__ == "__main__":
          search_type=args.search_type or SEARCH_DEFAULT,
          recursive=args.recursive,
          ignore=ignore,
-         verbose=args.verbose)
+         verbose=args.verbose,
+         color=args.color)
