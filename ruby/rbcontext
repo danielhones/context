@@ -1,9 +1,11 @@
 #!/usr/bin/env ruby
-require 'ripper'
 require 'stringio'
 require 'pp'
 require 'optparse'
 require 'find'
+
+# TODO: Investigate ripper as an alternative to Parser:
+# require 'ripper'
 
 oldstderr, $stderr = $stderr, StringIO.new  # suppress warnings
 require 'parser/current'

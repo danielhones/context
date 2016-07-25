@@ -60,7 +60,10 @@ Options:
 
 # Installing
 
+`pycontext` works out of the box.  Just put it somewhere in your path and make it executable and you're good to go.  For
+`rbcontext`, do the same and install its dependency:
 
+`gem install parser`
 
 
 ## rbcontext quirks
