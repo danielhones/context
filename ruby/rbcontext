@@ -169,7 +169,7 @@ if __FILE__ == $0
   options = {:verbose => 0}
   OptionParser.new do |opts|
     opts.set_banner("Find lines in a Ruby source file and the context they're in\n\n" +
-                    "Usage: #{$0} [options] look_for [paths]\n" +
+                    "Usage: #{File.basename($0)} [options] look_for [paths]\n" +
                     "Options:\n")
     opts.on("-v", "--verbose", "display information about errors and skipped files") { |v| options[:verbose] += 1 }
     opts.on("-r", "--recursive", "recursively search directory") { |v| options[:recursive] = true }
