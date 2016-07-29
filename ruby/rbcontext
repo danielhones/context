@@ -31,10 +31,15 @@ class SourceCode
   end
   
   def add_line_color(line)
-    # TODO: this doesn't work right with regexps because it colors the regex itself, not
-    # the string it matched in the line.
-    colored_look_for = @line_color + @look_for + @end_color
-    line.gsub(Regexp.new(@look_for), colored_look_for)
+    # TODO: Pretty sure this still doesn't handle replacement right when there are multiple different regex matches
+    # on the same line
+    re = Regexp.new("(#{@look_for})")
+    if re =~ line
+      colored_look_for = @line_color + $1 + @end_color
+      line.gsub(Regexp.new(@look_for), colored_look_for)
+    else
+      line
+    end
   end
 
   def add_num_color(lineno)
