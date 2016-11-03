@@ -9,35 +9,97 @@ import itertools
 
 
 IGNORE_DIRECTORIES = ["__pycache__", ".git"]
-SEARCH_DEFAULT, SEARCH_LINENO, SEARCH_REGEX, SEARCH_DEFINITIONS = range(4)
+SEARCH_LINENO, SEARCH_REGEX, SEARCH_DEFINITIONS = range(3)
+SEARCH_DEFAULT = SEARCH_REGEX
 BLUE = "\033[34m"
 LIGHT_GREEN =  "\033[92m"
 END_COLOR = "\033[0m"
 
 
-def echo(*args):
-    """A poor man's print"""
-    output = " ".join([str(i) for i in args]) + "\n"
-    sys.stdout.write(output)
+class Matcher(ast.NodeVisitor):
+    def __init__(self, look_for):
+        self.look_for = self.format_look_for(look_for)
+        self.history = []
+        self.matches = []
+
+    def format_look_for(self, look_for):
+        return look_for
+
+    def color_line(self, lineno, line):
+        return line
+
+    def generic_visit(self, node):
+        try:
+            self.history.append(node.lineno)
+            history_added = True
+        except:
+            history_added = False
+
+        match = self.node_matches(node)
+        if match:
+            self.matches = self.matches + self.history + [match]
+        for i in ast.iter_child_nodes(node):
+            self.visit(i)
+
+        if len(self.history) > 0 and history_added:
+            self.history.pop()
+
+    def node_matches(self, node):
+        """
+        Must be implemented by a subclass.
+        Return the line number if the node matches or None otherwise.
+        """
+        raise NotImplementedError("node_matches must be overridden by a subclass")
+
+
+class LineNoMatcher(Matcher):
+    def format_look_for(self, look_for):
+        return int(look_for)
+
+    def color_line(self, lineno, line):
+        if lineno == self.look_for:
+            return "{line_color}{line}{end_color}"
+        return line
+
+    def node_matches(self, node):
+        try:
+            lineno = node.lineno
+            return lineno if lineno == self.look_for else None
+        except Exception as e:
+            return None
+
+
+class RegexMatcher(Matcher):
+    def format_look_for(self, look_for):
+        return re.compile(look_for)
 
 
 class SourceCode(object):
-    def __init__(self, filename, look_for=None, num_color=None, line_color=None, offset=1):
+    def __init__(self, source, matcher, look_for=None, num_color=None,
+                 line_color=None, offset=1, filename=''):
         """
-        offset is the difference between the number of the first line of the file and 0.  It's probably 1.
+        offset is the difference between the number of the first line
+        of the file and 0.  It's probably 1.
         """
-        self.offset = offset
+        self.source = source
+        self.matcher = matcher
         self.filename = filename
         self.lines = []
         self.look_for = look_for
         self.num_color = num_color or ""
         self.line_color = line_color or ""
+        self.offset = offset
         self.end_color = END_COLOR if (num_color or line_color) else ""
-        with open(filename, "r") as f:
-            self.lines = f.readlines()
+        self.lines = self.source.readlines()
+        self._raw = "".join(self.lines)
+        self.matches = []
 
-    def __repr__(self):
-        return "SourceCode('{}', {})".format(self.filename, self.offset)
+    def find_context(self):
+        tree = ast.parse(self._raw, filename=self.filename)
+        for node in ast.iter_child_nodes(tree):
+            self.matcher.visit(node)
+        self.matches = sorted(set(self.matcher.matches))
+        return [self.format_line(i) for i in self.matches]
 
     def line(self, lineno):
         return self.lines[lineno - self.offset]
@@ -46,105 +108,18 @@ class SourceCode(object):
     def numlines(self):
         return len(self.lines)
 
-    def add_line_color(self, line):
-        # TODO: this doesn't work right with regexps because it colors the regex itself, not
-        # the string it matched in the line (same as Ruby version just copied here)
-        colored_look_for = self.line_color + self.look_for + self.end_color
-        return line.replace(self.look_for, colored_look_for)
-
     def add_num_color(self, lineno):
         return self.num_color + lineno + self.end_color
 
     def format_line(self, lineno):
-        colored_num = self.add_num_color(str(lineno).rjust(len(str(self.numlines))))
-        colored_line = self.add_line_color(self.line(lineno))
+        num_padding = len(str(self.numlines))
+        colored_num = self.add_num_color(str(lineno).rjust(num_padding))
+        line = self.line(lineno)
+        template_line = self.matcher.color_line(lineno, line)
+        colored_line = template_line.format(line_color=self.line_color,
+                                            line=line,
+                                            end_color=self.end_color)
         return "{}:  {}".format(colored_num, colored_line)
-
-
-def make_matcher(search_type, look_for):
-    def _regex(node):
-        try: lineno = node.lineno
-        except: return None
-        for attr in node._fields:
-            try:
-                if look_for.match(getattr(node, attr)):
-                    return lineno
-            except:
-                pass
-
-    def _default(node):
-        try: lineno = node.lineno
-        except: return None
-        for attr in node._fields:
-            if getattr(node, attr) == look_for:
-                return lineno       
-
-    def _lineno(node):
-        try: lineno = node.lineno
-        except: return None
-        return lineno if lineno == look_for else None
-
-    # Convert look_for to the type that the matcher functions need.
-    # Doing it here rather than inside the matcher function because it only needs to happen once
-    look_for = {SEARCH_DEFAULT: lambda x: x,
-                SEARCH_LINENO: int,
-                SEARCH_REGEX: re.compile}[search_type](look_for)
-    return {SEARCH_DEFAULT: _default,
-            SEARCH_LINENO: _lineno,
-            SEARCH_REGEX: _regex}[search_type]
-
-
-def walk(node, matcher, history=None):
-    history = [] if history is None else history[:]
-    matches = []
-
-    def append_to_history(item):
-        try: history.append(item.lineno)
-        except AttributeError: pass
-
-    def pop_from_history():
-        try: history.pop()
-        except IndexError: pass
-
-    children = list(ast.iter_child_nodes(node))
-    match = matcher(node)
-
-    if match:
-        matches.append(match)
-        matches = list(set(matches + history))
-
-    if len(children) == 0:
-        return set(matches)
-
-    append_to_history(node)
-    for i in children:
-        append_to_history(i)
-        matches.extend(walk(i, matcher, history))
-        pop_from_history()
-    pop_from_history()
-
-    return set(matches)
-
-
-def find_top_level(tree, depth=1):
-    matches = [i.lineno for i in ast.iter_child_nodes(tree) if isinstance(i, (ast.FunctionDef, ast.ClassDef))]
-    return matches
-
-
-def find_context(tree, look_for, matcher):
-    """
-    Return a list of lines indicating branches that lead to the object we're looking for
-    """
-    # TODO: Add something to parse look_for, for example FooClass.bar should only match bar
-    #       function calls that are attributes of a FooClass instance
-    matches = walk(tree, matcher)
-    return sorted(list(matches))
-
-
-def parse_source(filename):
-    with open(filename, "r") as f:
-        tree = ast.parse(f.read(), filename=filename)
-    return tree
 
 
 def main(look_for, files, search_type=SEARCH_DEFAULT, recursive=False,
@@ -154,54 +129,31 @@ def main(look_for, files, search_type=SEARCH_DEFAULT, recursive=False,
     """
     num_color = BLUE if color else None
     line_color = LIGHT_GREEN if color else None
-    if recursive:
-        files = itertools.chain(*[os.walk(f) for f in files])
-    else:
-        # format returned by os.walk:
-        files = [(os.curdir, [], [f]) for f in files]
-
     all_contexts = {}
     skipped_files = {}
 
-    for (directory, _, filenames) in files:
-        abspath = os.path.abspath(directory)
+    # TODO: need to make this handle the recursive option
+    if type(files) != list:
+        files = [files]
 
-        current_ignore = []
-        for i in ignore:
-            current_ignore.extend(glob.glob(os.path.abspath(i)))
+    if search_type == SEARCH_REGEX:
+        matcher = RegexMatcher(look_for)
+    elif search_type == SEARCH_LINENO:
+        matcher = LineNoMatcher(look_for)
 
-        if abspath in current_ignore:
-            continue
-        for fn in filenames:
-            source_file = os.path.join(directory, fn)
-            if os.path.abspath(source_file) in current_ignore or source_file in current_ignore:
-                continue
-            try:
-                source = SourceCode(source_file, look_for=look_for, num_color=num_color, line_color=line_color)
-                tree = parse_source(source_file)
-                if search_type == SEARCH_DEFINITIONS:
-                    context = find_top_level(tree)
-                else:
-                    context = find_context(tree, look_for, make_matcher(search_type, look_for))
-            except KeyboardInterrupt as e:
-                sys.exit(1)
-            except Exception as e:
-                skipped_files[source_file] = "{}: {}".format(e.__class__.__name__, e)
-                continue
-            if len(context) == 0:
-                continue
+    for f in files:
+        # TODO: need to handle the ignore option here
+        try:
+            source = SourceCode(f, matcher, filename=f.name,
+                                line_color=line_color, num_color=num_color)
+            result = source.find_context()
+            sys.stdout.write("\n" + f.name + "\n\n" +
+                             "".join(result) +
+                             "\n")
+            all_contexts[f.name] = result
+        except Exception as e:
+            skipped_files[f.name] = e
 
-            if recursive or len(files) > 1:
-                echo("\n{}".format(source_file))
-
-            all_contexts[source_file] = context
-            echo("\n" + "".join([source.format_line(i) for i in context]))
-
-    if verbose and skipped_files:
-        echo("Skipped these files due to errors:\n{}".format(
-            "\n".join(["{}: {}".format(key, skipped_files[key]) for key in skipped_files])))
-
-    # to make testing easier, don't have to capture and parse stdout:
     return all_contexts
 
 
@@ -210,14 +162,21 @@ if __name__ == "__main__":
         description="Find lines in a Python source file and the context they're in."
     )
     parser.add_argument("look_for", help="object to look for in the file")
-    parser.add_argument("paths", help="files (or directories if -r option) to look in", nargs="+")
-    parser.add_argument("-r", "--recursive", action="store_true", help="recursively search directory")
+    parser.add_argument("paths",
+                        nargs="*",  # TODO: try nargs="*" here for multiple
+                        type=argparse.FileType('r'),
+                        default=sys.stdin,
+                        help="files (or directories if -r option) to look in")
+    parser.add_argument("-r", "--recursive", action="store_true",
+                        help="recursively search directory")
     parser.add_argument("-c", "--color", action="store_true", help="colorize output")
-    parser.add_argument("-n", "--search-line", dest="search_type", action="store_const", const=SEARCH_LINENO,
+    parser.add_argument("-n", "--search-line", dest="search_type",
+                        action="store_const", const=SEARCH_LINENO,
                         help="search by line number")
-    parser.add_argument("-e", "--search-regex", dest="search_type", action="store_const", const=SEARCH_REGEX,
-                        help="search by regexp")
-    parser.add_argument("-d", "--search-defs", dest="search_type", action="store_const", const=SEARCH_DEFINITIONS,
+    parser.add_argument("-e", "--search-regex", dest="search_type", action="store_const",
+                        const=SEARCH_REGEX, help="search by regexp")
+    parser.add_argument("-d", "--search-defs", dest="search_type",
+                        action="store_const", const=SEARCH_DEFINITIONS,
                         help=("just look for class and function definitions.  The look_for argument "
                               "should be an integer indicating the maxmimum depth of search"))
     parser.add_argument("-v", "--verbose", action="store_true",
@@ -234,7 +193,7 @@ if __name__ == "__main__":
 
     main(args.look_for,
          args.paths,
-         search_type=args.search_type or SEARCH_DEFAULT,
+         search_type=args.search_type,
          recursive=args.recursive,
          ignore=ignore,
          verbose=args.verbose,
