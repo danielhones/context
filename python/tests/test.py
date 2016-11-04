@@ -61,12 +61,6 @@ class TestWalk(unittest.TestCase):
         self.assertEqual(sorted(matches), BAR_LINE_NOS)
 
 
-class TestFindTopLevel(unittest.TestCase):
-    def test_class_and_func_definitions(self):
-        tree = parse_source(EXAMPLE_FILE)
-        self.assertEqual(find_top_level(tree), [4, 21])
-
-
 class TestMain(unittest.TestCase):
     THIS_FILE_RELPATH = "./test.py"
     EXAMPLE_FILE_RELPATH = "./example_files/example.py"

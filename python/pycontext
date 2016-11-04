@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import ast
+# import astroid
 import argparse
 import sys
 import os
@@ -17,7 +18,9 @@ END_COLOR = "\033[0m"
 
 
 class Matcher(ast.NodeVisitor):
-    def __init__(self, look_for):
+    def __init__(self, look_for, lines, offset):
+        self.lines = lines
+        self.offset = offset
         self.look_for = self.format_look_for(look_for)
         self.history = []
         self.matches = []
@@ -29,11 +32,26 @@ class Matcher(ast.NodeVisitor):
         return line
 
     def generic_visit(self, node):
+        # TODO: This method still has the bug of not including lines that say "else:"
+        #       Figure out why and fix it.  Also look for other cases of similar bugs
+        #       and write some tests to catch them.
+        # NOTE: This is because there is no actual "Else" node, only an 'orelse' field
+        #       on the "If" node, which only contains the body of the else block.  So
+        #       there's not actually any node that has the lineno of an 'else:' line.
+        #       Not sure what to do about this.
+
         try:
             self.history.append(node.lineno)
-            history_added = True
+            history_added = 1
+            # else clauses need special handling and we resort to this heuristic
+            # to get the line number:
+
         except:
             history_added = False
+
+        # print("INSPECTING:", node)
+        # for k, v in ast.iter_fields(node):
+        #     print("FIELD: ", k, v)
 
         match = self.node_matches(node)
         if match:
@@ -41,8 +59,9 @@ class Matcher(ast.NodeVisitor):
         for i in ast.iter_child_nodes(node):
             self.visit(i)
 
-        if len(self.history) > 0 and history_added:
-            self.history.pop()
+        if history_added and len(self.history) > 0:
+            for _ in range(history_added):
+                self.history.pop()
 
     def node_matches(self, node):
         """
@@ -54,24 +73,34 @@ class Matcher(ast.NodeVisitor):
 
 class LineNoMatcher(Matcher):
     def format_look_for(self, look_for):
-        return int(look_for)
+        return [int(look_for)]
 
     def color_line(self, lineno, line):
-        if lineno == self.look_for:
+        if lineno in self.look_for:
             return "{line_color}{line}{end_color}"
         return line
 
     def node_matches(self, node):
         try:
             lineno = node.lineno
-            return lineno if lineno == self.look_for else None
+            return lineno if lineno in self.look_for else None
         except Exception as e:
             return None
 
 
-class RegexMatcher(Matcher):
+class RegexMatcher(LineNoMatcher):
     def format_look_for(self, look_for):
-        return re.compile(look_for)
+        self.look_for_re = re.compile("({})".format(look_for))
+        matching_lines = [i + self.offset for i, j in enumerate(self.lines)
+                          if self.look_for_re.search(j)]
+        return matching_lines
+
+    def color_line(self, lineno, line):
+        match = self.look_for_re.search(line)
+        if match:
+            matched = "{line_color}" + match.group(0) + "{end_color}"
+            return self.look_for_re.sub(matched, line)
+        return line
 
 
 class SourceCode(object):
@@ -82,7 +111,6 @@ class SourceCode(object):
         of the file and 0.  It's probably 1.
         """
         self.source = source
-        self.matcher = matcher
         self.filename = filename
         self.lines = []
         self.look_for = look_for
@@ -92,6 +120,7 @@ class SourceCode(object):
         self.end_color = END_COLOR if (num_color or line_color) else ""
         self.lines = self.source.readlines()
         self._raw = "".join(self.lines)
+        self.matcher = matcher(self.look_for, self.lines, self.offset)
         self.matches = []
 
     def find_context(self):
@@ -137,14 +166,14 @@ def main(look_for, files, search_type=SEARCH_DEFAULT, recursive=False,
         files = [files]
 
     if search_type == SEARCH_REGEX:
-        matcher = RegexMatcher(look_for)
+        matcher = RegexMatcher
     elif search_type == SEARCH_LINENO:
-        matcher = LineNoMatcher(look_for)
+        matcher = LineNoMatcher
 
     for f in files:
         # TODO: need to handle the ignore option here
         try:
-            source = SourceCode(f, matcher, filename=f.name,
+            source = SourceCode(f, matcher, look_for, filename=f.name,
                                 line_color=line_color, num_color=num_color)
             result = source.find_context()
             sys.stdout.write("\n" + f.name + "\n\n" +
@@ -153,6 +182,10 @@ def main(look_for, files, search_type=SEARCH_DEFAULT, recursive=False,
             all_contexts[f.name] = result
         except Exception as e:
             skipped_files[f.name] = e
+
+    if verbose and skipped_files:
+        sys.stdout.write("\nSkipped these files due to errors:\n")
+        [sys.stdout.write("{}: {}\n".format(key, skipped_files[key])) for key in skipped_files]
 
     return all_contexts
 
@@ -193,7 +226,7 @@ if __name__ == "__main__":
 
     main(args.look_for,
          args.paths,
-         search_type=args.search_type,
+         search_type=args.search_type or SEARCH_DEFAULT,
          recursive=args.recursive,
          ignore=ignore,
          verbose=args.verbose,
