@@ -73,7 +73,10 @@ class Matcher(ast.NodeVisitor):
 
 class LineNoMatcher(Matcher):
     def format_look_for(self, look_for):
-        return [int(look_for)]
+        if type(look_for) not in [list, tuple]:
+            return [int(look_for)]
+        else:
+            return [int(i) for i in look_for]
 
     def color_line(self, lineno, line):
         if lineno in self.look_for:
@@ -151,7 +154,7 @@ class SourceCode(object):
         return "{}:  {}".format(colored_num, colored_line)
 
 
-def main(look_for, files, search_type=SEARCH_DEFAULT, recursive=False,
+def main(look_for, files, search_type=None, recursive=False,
          ignore=IGNORE_DIRECTORIES, verbose=False, color=False):
     """
     look_for is a string, files is a list of paths
@@ -160,6 +163,8 @@ def main(look_for, files, search_type=SEARCH_DEFAULT, recursive=False,
     line_color = LIGHT_GREEN if color else None
     all_contexts = {}
     skipped_files = {}
+    if search_type is None:
+        search_type = SEARCH_DEFAULT
 
     # TODO: need to make this handle the recursive option
     if type(files) != list:
@@ -194,28 +199,32 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Find lines in a Python source file and the context they're in."
     )
-    parser.add_argument("look_for", help="object to look for in the file")
+    parser.add_argument("look_for",
+                        help=("Object to look for in the file.  For certain search"
+                              "types this can be a comma-separated list or a Python"
+                              "list such as [6,8,10]"))
     parser.add_argument("paths",
-                        nargs="*",  # TODO: try nargs="*" here for multiple
+                        nargs="*",
                         type=argparse.FileType('r'),
                         default=sys.stdin,
-                        help="files (or directories if -r option) to look in")
+                        help=("Files (or directories if -r option) to look in. "
+                              "If there is no argument passed here, read from STDIN"))
     parser.add_argument("-r", "--recursive", action="store_true",
-                        help="recursively search directory")
+                        help="Recursively search directory")
     parser.add_argument("-c", "--color", action="store_true", help="colorize output")
     parser.add_argument("-n", "--search-line", dest="search_type",
                         action="store_const", const=SEARCH_LINENO,
-                        help="search by line number")
+                        help="Search by line number.  Allows a list as the look_for argument")
     parser.add_argument("-e", "--search-regex", dest="search_type", action="store_const",
                         const=SEARCH_REGEX, help="search by regexp")
-    parser.add_argument("-d", "--search-defs", dest="search_type",
-                        action="store_const", const=SEARCH_DEFINITIONS,
-                        help=("just look for class and function definitions.  The look_for argument "
-                              "should be an integer indicating the maxmimum depth of search"))
+    # parser.add_argument("-d", "--search-defs", dest="search_type",
+    #                     action="store_const", const=SEARCH_DEFINITIONS,
+    #                     help=("Just look for class and function definitions.  The look_for argument "
+    #                           "Should be an integer indicating the maxmimum depth of search"))
     parser.add_argument("-v", "--verbose", action="store_true",
-                        help="display information about errors and skipped files")
+                        help="Display information about errors and skipped files")
     parser.add_argument("-i", "--ignore",
-                        help=("comma-separated list of files and directories "
+                        help=("Comma-separated list of files and directories "
                               "to ignore, default is {}".format(IGNORE_DIRECTORIES)))
     args = parser.parse_args()
 
@@ -224,9 +233,17 @@ if __name__ == "__main__":
     else:
         ignore = IGNORE_DIRECTORIES
 
-    main(args.look_for,
+
+    look_for = args.look_for
+    if args.search_type == SEARCH_LINENO:
+        try:
+            look_for = eval(args.look_for)
+        except:
+            pass
+
+    main(look_for,
          args.paths,
-         search_type=args.search_type or SEARCH_DEFAULT,
+         search_type=args.search_type,
          recursive=args.recursive,
          ignore=ignore,
          verbose=args.verbose,
