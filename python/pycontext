@@ -93,7 +93,7 @@ class RegexMatcher(LineNoMatcher):
 
 class SourceCode(object):
     def __init__(self, source, matcher, look_for=None, num_color=None,
-                 line_color=None, offset=1, filename=''):
+                 line_color=None, offset=1, filename='', number_lines=None):
         """
         offset is the difference between the number of the first line
         of the file and 0.  It's probably 1.
@@ -104,6 +104,7 @@ class SourceCode(object):
         self.look_for = look_for
         self.num_color = num_color or ""
         self.line_color = line_color or ""
+        self.number_lines = number_lines
         self.offset = offset
         self.end_color = END_COLOR if (num_color or line_color) else ""
         self.lines = self.source.readlines()
@@ -137,18 +138,21 @@ class SourceCode(object):
         return self.num_color + lineno + self.end_color
 
     def format_line(self, lineno):
-        num_padding = len(str(self.numlines))
-        colored_num = self.add_num_color(str(lineno).rjust(num_padding))
         line = self.line(lineno)
         colored_line = self.matcher.color_line(lineno,
                                                line,
                                                line_color=self.line_color,
                                                end_color=self.end_color)
-        return "{}:  {}".format(colored_num, colored_line)
+        if self.number_lines:
+            num_padding = len(str(self.numlines))
+            colored_num = self.add_num_color(str(lineno).rjust(num_padding))
+            return "{}: {}".format(colored_num, colored_line)
+        else:
+            return colored_line
 
 
-def main(look_for, files, search_type=None, recursive=False,
-         ignore=IGNORE_DIRECTORIES, verbose=False, color=False):
+def main(look_for, files, search_type=None, ignore=None,
+         verbose=False, color=False, number_lines=False):
     """
     look_for is a string, files is a list of paths
     """
@@ -172,12 +176,14 @@ def main(look_for, files, search_type=None, recursive=False,
         # TODO: need to handle the ignore option here
         try:
             source = SourceCode(f, matcher, look_for, filename=f.name,
-                                line_color=line_color, num_color=num_color)
+                                line_color=line_color, num_color=num_color,
+                                number_lines=number_lines)
             result = source.find_context()
-            sys.stdout.write("\n" + f.name + "\n\n" +
-                             "".join(result) +
-                             "\n")
-            all_contexts[f.name] = result
+            if result:
+                sys.stdout.write("\n" + f.name + "\n\n" +
+                                 "".join(result) +
+                                 "\n")
+                all_contexts[f.name] = result
         except Exception as e:
             skipped_files[f.name] = e
 
@@ -202,29 +208,17 @@ if __name__ == "__main__":
                         default=sys.stdin,
                         help=("Files (or directories if -r option) to look in. "
                               "If there is no argument passed here, read from STDIN"))
-    parser.add_argument("-r", "--recursive", action="store_true",
-                        help="Recursively search directory")
     parser.add_argument("-c", "--color", action="store_true", help="colorize output")
-    parser.add_argument("-n", "--search-line", dest="search_type",
+    parser.add_argument("-n", "--number-lines", action="store_true", dest="number_lines",
+                        help="include line numbers in results")
+    parser.add_argument("-l", "--search-line", dest="search_type",
                         action="store_const", const=SEARCH_LINENO,
                         help="Search by line number.  Allows a list as the look_for argument")
     parser.add_argument("-e", "--search-regex", dest="search_type", action="store_const",
                         const=SEARCH_REGEX, help="search by regexp")
-    # parser.add_argument("-d", "--search-defs", dest="search_type",
-    #                     action="store_const", const=SEARCH_DEFINITIONS,
-    #                     help=("Just look for class and function definitions.  The look_for argument "
-    #                           "Should be an integer indicating the maxmimum depth of search"))
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="Display information about errors and skipped files")
-    parser.add_argument("-i", "--ignore",
-                        help=("Comma-separated list of files and directories "
-                              "to ignore, default is {}".format(IGNORE_DIRECTORIES)))
     args = parser.parse_args()
-
-    if args.ignore:
-        ignore = args.ignore.split(",") + IGNORE_DIRECTORIES
-    else:
-        ignore = IGNORE_DIRECTORIES
 
     look_for = args.look_for
     if args.search_type == SEARCH_LINENO:
@@ -236,7 +230,6 @@ if __name__ == "__main__":
     main(look_for,
          args.paths,
          search_type=args.search_type,
-         recursive=args.recursive,
-         ignore=ignore,
          verbose=args.verbose,
-         color=args.color)
+         color=args.color,
+         number_lines=args.number_lines)
