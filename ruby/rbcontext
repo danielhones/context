@@ -90,23 +90,29 @@ class SourceCode
     @source = source
     @look_for = look_for
     @filename = opts[:filename]
-    @lines = File.readlines(filename)
     @offset = opts.fetch(:offset, 1)
     @num_color = opts[:num_color] || ""
     @line_color = opts[:line_color] || ""
     @number_lines = opts[:number_lines]
     @end_color = (num_color || line_color) ? END_COLOR : ""
+    @lines = File.readlines(filename)
+    @processed_raw = replace_else.join("")
     @matcher = matcher.new(look_for, lines, offset)
     @matches = []
   end
 
   def find_context
-    tree = Parser::CurrentRuby.parse_file(filename)
+    tree = Parser::CurrentRuby.parse(@processed_raw)
     tree.children.each do |node|
       matcher.visit(node)
     end
     @matches = matcher.matches.sort.uniq
     matches.map{ |i| format_line(i) }
+  end
+
+  def replace_else
+    # same missing else bug that pycontext had, same fix:
+    lines.map{ |l| l.sub(/^( *)else\b/, '\1elsif True') }
   end
   
   def line(lineno)
@@ -168,7 +174,7 @@ def main(look_for, files, search_type: SEARCH_DEFAULT,
     next if context.length == 0
 
     puts ""
-    puts filename if files.length > 1
+    puts "#{filename}\n\n" if files.length > 1
     puts context.join("")
     puts ""
   end
@@ -185,14 +191,14 @@ end
 if __FILE__ == $0
   options = {:verbose => 0}
   OptionParser.new do |opts|
-    opts.set_banner("Find lines in a Ruby source file and the context they're in\n\n" +
-                    "Usage: #{File.basename($0)} [options] look_for [paths]\n" +
+    opts.set_banner("Usage: #{File.basename($0)} [options] look_for [paths]\n\n" +
+                    "Find lines in a Ruby source file and the context they're in\n\n" +
                     "Options:\n")
     opts.on("-v", "--verbose", "display information about errors and skipped files") { |v| options[:verbose] += 1 }
     opts.on("-l", "--search-line", "search by line number") { |v| options[:search_type] = SEARCH_LINENO }
     opts.on("-e", "--search-regex", "search by regular expression") { |v| options[:search_type] = SEARCH_REGEX }
     opts.on("-c", "--color", "highlight line numbers and matches") { |v| options[:color] = true }
-    opts.on("-n", "--number-lines", "highlight line numbers and matches") { |v| options[:number_lines] = true }
+    opts.on("-n", "--number-lines", "show line numbers in results") { |v| options[:number_lines] = true }
     opts.on("-h", "--help", "print this help") { puts opts; exit }
     if ARGV[0].nil?
       puts opts; exit
@@ -200,7 +206,7 @@ if __FILE__ == $0
   end.parse!
 
   look_for = ARGV.shift
-  paths = ARGV
+  paths = ARGV  # TODO: switch to using ARGF here
 
   main(look_for, paths,
        search_type: options[:search_type] || SEARCH_DEFAULT,
