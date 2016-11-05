@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import ast
-# import astroid
 import argparse
 import sys
 import os
@@ -32,26 +31,11 @@ class Matcher(ast.NodeVisitor):
         return line
 
     def generic_visit(self, node):
-        # TODO: This method still has the bug of not including lines that say "else:"
-        #       Figure out why and fix it.  Also look for other cases of similar bugs
-        #       and write some tests to catch them.
-        # NOTE: This is because there is no actual "Else" node, only an 'orelse' field
-        #       on the "If" node, which only contains the body of the else block.  So
-        #       there's not actually any node that has the lineno of an 'else:' line.
-        #       Not sure what to do about this.
-
         try:
             self.history.append(node.lineno)
             history_added = 1
-            # else clauses need special handling and we resort to this heuristic
-            # to get the line number:
-
         except:
             history_added = False
-
-        # print("INSPECTING:", node)
-        # for k, v in ast.iter_fields(node):
-        #     print("FIELD: ", k, v)
 
         match = self.node_matches(node)
         if match:
@@ -122,16 +106,24 @@ class SourceCode(object):
         self.offset = offset
         self.end_color = END_COLOR if (num_color or line_color) else ""
         self.lines = self.source.readlines()
-        self._raw = "".join(self.lines)
+        self._processed_lines = self.replace_else()
+        self._processed_raw = "".join(self._processed_lines)
         self.matcher = matcher(self.look_for, self.lines, self.offset)
         self.matches = []
 
     def find_context(self):
-        tree = ast.parse(self._raw, filename=self.filename)
+        tree = ast.parse(self._processed_raw, filename=self.filename)
         for node in ast.iter_child_nodes(tree):
             self.matcher.visit(node)
         self.matches = sorted(set(self.matcher.matches))
         return [self.format_line(i) for i in self.matches]
+
+    def replace_else(self):
+        # To get around the bug/feature of ast that an else line has no line number,
+        # we replace it with 'elif True' before parsing, but display the original
+        # line in the results
+        else_re = re.compile('^(?P<space> *)(else:)')
+        return [else_re.sub(r"\g<space>elif True:", i) for i in self.lines]
 
     def line(self, lineno):
         return self.lines[lineno - self.offset]
@@ -232,7 +224,6 @@ if __name__ == "__main__":
         ignore = args.ignore.split(",") + IGNORE_DIRECTORIES
     else:
         ignore = IGNORE_DIRECTORIES
-
 
     look_for = args.look_for
     if args.search_type == SEARCH_LINENO:
