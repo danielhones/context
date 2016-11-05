@@ -6,6 +6,7 @@ import os
 import glob
 import re
 import itertools
+import traceback
 
 
 IGNORE_DIRECTORIES = ["__pycache__", ".git"]
@@ -62,9 +63,9 @@ class LineNoMatcher(Matcher):
         else:
             return [int(i) for i in look_for]
 
-    def color_line(self, lineno, line):
+    def color_line(self, lineno, line, line_color="", end_color=""):
         if lineno in self.look_for:
-            return "{line_color}{line}{end_color}"
+            return line_color + line + end_color
         return line
 
     def node_matches(self, node):
@@ -82,10 +83,10 @@ class RegexMatcher(LineNoMatcher):
                           if self.look_for_re.search(j)]
         return matching_lines
 
-    def color_line(self, lineno, line):
+    def color_line(self, lineno, line, line_color="", end_color=""):
         match = self.look_for_re.search(line)
         if match:
-            matched = "{line_color}" + match.group(0) + "{end_color}"
+            matched = line_color + match.group(0) + end_color
             return self.look_for_re.sub(matched, line)
         return line
 
@@ -139,10 +140,10 @@ class SourceCode(object):
         num_padding = len(str(self.numlines))
         colored_num = self.add_num_color(str(lineno).rjust(num_padding))
         line = self.line(lineno)
-        template_line = self.matcher.color_line(lineno, line)
-        colored_line = template_line.format(line_color=self.line_color,
-                                            line=line,
-                                            end_color=self.end_color)
+        colored_line = self.matcher.color_line(lineno,
+                                               line,
+                                               line_color=self.line_color,
+                                               end_color=self.end_color)
         return "{}:  {}".format(colored_num, colored_line)
 
 
