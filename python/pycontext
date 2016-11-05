@@ -9,7 +9,6 @@ import itertools
 import traceback
 
 
-IGNORE_DIRECTORIES = ["__pycache__", ".git"]
 SEARCH_LINENO, SEARCH_REGEX, SEARCH_DEFINITIONS = range(3)
 SEARCH_DEFAULT = SEARCH_REGEX
 BLUE = "\033[34m"
@@ -28,7 +27,7 @@ class Matcher(ast.NodeVisitor):
     def format_look_for(self, look_for):
         return look_for
 
-    def color_line(self, lineno, line):
+    def color_line(self, lineno, line, line_color="", end_color=""):
         return line
 
     def generic_visit(self, node):
@@ -178,12 +177,12 @@ def main(look_for, files, search_type=None, ignore=None,
             source = SourceCode(f, matcher, look_for, filename=f.name,
                                 line_color=line_color, num_color=num_color,
                                 number_lines=number_lines)
-            result = source.find_context()
-            if result:
+            context = source.find_context()
+            if context:
                 sys.stdout.write("\n" + f.name + "\n\n" +
                                  "".join(result) +
                                  "\n")
-                all_contexts[f.name] = result
+                all_contexts[f.name] = context
         except Exception as e:
             skipped_files[f.name] = e
 

@@ -10,6 +10,10 @@ class FooClass
     puts "in bar"
     if @a > @b
       nil
+    elsif @b < @a
+      "something"
+    else
+      "something else"
     end
   end
 

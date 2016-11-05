@@ -13,115 +13,133 @@ $stderr = oldstderr
 
 
 SEARCH_DEFAULT, SEARCH_LINENO, SEARCH_REGEX = (0..2).to_a
-IGNORE_DIRECTORIES = [".git"]
 BLUE = "\e[34m"
 LIGHT_GREEN =  "\e[92m"
 END_COLOR = "\e[0m"
 
 
-class SourceCode
-  def initialize(filename, look_for: nil, num_color: nil, line_color: nil, offset: 1)
-    @filename = filename
+class Matcher
+  attr_accessor :lines, :offset, :look_for, :history, :matches
+
+  def initialize(look_for, lines, offset)
+    @lines = lines
     @offset = offset
-    @lines = File.readlines(filename)
-    @look_for = look_for
-    @num_color = num_color || ""
-    @line_color = line_color || ""
-    @end_color = (num_color || line_color) ? END_COLOR : ""
+    @look_for = format_look_for(look_for)
+    @history = []
+    @matches = []
   end
   
-  def add_line_color(line)
-    # TODO: Pretty sure this still doesn't handle replacement right when there are multiple different regex matches
-    # on the same line
-    re = Regexp.new("(#{@look_for})")
-    if re =~ line
-      colored_look_for = @line_color + $1 + @end_color
-      line.gsub(Regexp.new(@look_for), colored_look_for)
-    else
-      line
-    end
+  def format_look_for(look_for)
+    look_for
   end
 
-  def add_num_color(lineno)
-    @num_color + lineno + @end_color
+  def color_line(lineno, line, line_color: "", end_color: "")
+    line
+  end
+
+  def visit(node)
+    history_added = 0
+    lineno = node.location.line rescue nil
+    @history.push(lineno) if !lineno.nil?
+
+    match = node_matches(node)
+    if match
+      @matches = (matches + @history + [match]).uniq
+    end
+
+    if !node.is_a?(AST::Node) || node.children.nil? || node.children.length == 0
+      return
+    end
+
+    history.push(lineno)
+    node.children.each do |child|
+      history.push(child.location.line) rescue nil
+      visit(child)
+      history.pop
+    end
+    history.pop
+
+    # if node.is_a?(AST::Node) && !node.children.nil? && node.children.length > 0
+    #   node.children.each { |n| visit(n) }
+    # end
+
+    if history_added > 0 && @history.length > 0
+      @history.pop(history_added)
+    end
+  end
+end
+
+
+class LineNoMatcher < Matcher
+  def format_look_for(lf)
+    if lf.class != Array
+      [lf.to_i]
+    else
+      lf.map(&:to_i)
+    end
+  end
+  
+  def node_matches(node)
+    lineno = node.location.line rescue nil
+    m = look_for.include?(lineno) ? lineno : nil
+    #puts "LINENO #{lineno}, MATCH: #{m}"
+    m
+  end
+end
+
+
+class SourceCode
+  attr_accessor :filename, :lines, :look_for, :num_color, :line_color, :end_color,
+                :offset, :source, :number_lines, :matcher, :matches
+
+  def initialize(source, matcher, look_for, opts={})
+    @source = source
+    @filename = opts[:filename]
+    @offset = opts[:offset] || 1
+    @lines = File.readlines(filename)
+    @look_for = look_for
+    @num_color = opts[:num_color] || ""
+    @line_color = opts[:line_color] || ""
+    @end_color = (num_color || line_color) ? END_COLOR : ""
+    @matcher = matcher.new(look_for, lines, offset)
+    @matches = []
+  end
+
+  def find_context
+    tree = Parser::CurrentRuby.parse_file(filename)
+    tree.children.each do |node|
+      matcher.visit(node)
+    end
+    @matches = matcher.matches.sort.uniq
+    puts "MATCHES: #{matches}"
+    matches.map{ |i| format_line(i) }
   end
   
   def line(lineno)
-    @lines[lineno - @offset]
+    lines[lineno - offset]
   end
 
   def numlines
-    @lines.length
+    lines.length
   end
 
   def format_line(lineno)
-    colored_lineno = add_num_color( lineno.to_s.rjust(numlines.to_s.length) )
-    colored_line = add_line_color( line(lineno) )
-    "#{colored_lineno}:  #{colored_line}"
-  end
-end
-
-
-def make_matcher(search_type, look_for)
-  if search_type == SEARCH_REGEX
-    look_for = Regexp.new(look_for)
-  elsif search_type == SEARCH_LINENO
-    look_for = look_for.to_i
-  end
-
-  # TODO: both _default and _regex should probably use just one call to any? instead of
-  # map.include? and map.any?
-  _default = lambda do |node, lineno|
-    if node.respond_to?(:children) && node.children.map(&:to_s).include?(look_for)
-      return lineno
+    colored_line = matcher.color_line(lineno,
+                                      line(lineno),
+                                      line_color: line_color,
+                                      end_color: end_color)
+    if number_lines
+      colored_lineno = add_num_color( lineno.to_s.rjust(numlines.to_s.length) )
+      "#{colored_lineno}: #{colored_line}"
+    else
+      colored_line
     end
   end
-
-  _regex = lambda do |node, lineno|
-    if node.respond_to?(:children) && node.children.map(&:to_s).any?{ |s| look_for =~ s }
-      return lineno
-    end
-  end
-
-  _lineno = lambda do |node, lineno|
-    return lineno == look_for ? lineno : nil
-  end
-
-  {SEARCH_DEFAULT => _default,
-   SEARCH_LINENO => _lineno,
-   SEARCH_REGEX => _regex}[search_type]
-end
-
-
-def walk(node, matcher, history=nil)
-  history = history.nil? ? [] : history.dup.uniq
-  matches = []
-
-  lineno = node.location.line rescue nil
-  match = matcher.call(node, lineno)
-  if match
-    matches.push(match)
-    matches = (matches + history).uniq
-  end
- 
-  if !node.is_a?(AST::Node) || node.children.nil? || node.children.length == 0
-    return matches.uniq
-  end
-
-  history.push(lineno)
-  node.children.each do |child|
-    history.push(child.location.line) rescue nil
-    matches += walk(child, matcher, history)
-    history.pop
-  end
-  history.pop
-
-  return matches.compact.sort.uniq
 end
 
   
-def main(look_for, files, search_type: SEARCH_DEFAULT, recursive: false,
-         ignore: IGNORE_DIRECTORIES, verbose: false, color: false)
+def main(look_for, files, search_type: SEARCH_DEFAULT,
+         verbose: false, color: false)
   num_color = color ? BLUE : nil
   line_color = color ? LIGHT_GREEN : nil
 
@@ -129,22 +147,19 @@ def main(look_for, files, search_type: SEARCH_DEFAULT, recursive: false,
   all_contexts = {}
   skipped_files = {}
 
-  if recursive
-    files = files.map{ |dir|
-      Find.find(dir).map { |f|
-        File.expand_path(f, Dir.getwd)
-      }
-    }.flatten
-  end
 
   oldstderr, $stderr = $stderr, StringIO.new  # suppress parse warnings
+
+  matcher = LineNoMatcher
+    
   files.each do |f|
-    source_file = f
+    filename = f
     context = []
+
     begin
-      source = SourceCode.new(source_file, look_for: look_for, num_color: num_color, line_color: line_color)
-      tree = Parser::CurrentRuby.parse_file(source_file)
-      context = walk(tree, make_matcher(search_type, look_for))
+      source = SourceCode.new(f, matcher, look_for, :filename => filename, :number_lines => true,
+                              :num_color => num_color, :line_color => line_color)
+      context = source.find_context
     rescue SystemExit, Interrupt
       raise
     rescue => e
@@ -158,8 +173,8 @@ def main(look_for, files, search_type: SEARCH_DEFAULT, recursive: false,
     next if context.length == 0
 
     puts ""
-    puts source_file if recursive || files.length > 1
-    context.each { |lineno| puts source.format_line(lineno) }
+    puts filename if files.length > 1
+    puts context.join("")
     puts ""
   end
   $stderr = oldstderr
@@ -179,31 +194,26 @@ if __FILE__ == $0
                     "Usage: #{File.basename($0)} [options] look_for [paths]\n" +
                     "Options:\n")
     opts.on("-v", "--verbose", "display information about errors and skipped files") { |v| options[:verbose] += 1 }
-    opts.on("-r", "--recursive", "recursively search directory") { |v| options[:recursive] = true }
     opts.on("-n", "--search-line", "search by line number") { |v| options[:search_type] = SEARCH_LINENO }
     opts.on("-e", "--search-regex", "search by regular expression") { |v| options[:search_type] = SEARCH_REGEX }
     opts.on("-c", "--color", "highlight line numbers and matches") { |v| options[:color] = true }
     opts.on("-h", "--help", "print this help") { puts opts; exit }
-    opts.on("-i IGNORE", "--ignore IGNORE", "comma-separated list of files and directories to ignore") { |v|
-      options[:ignore] = IGNORE_DIRECTORIES + v.split(",")
-    }
     if ARGV[0].nil?
       puts opts; exit
     end
   end.parse!
 
-  look_for = ARGV[0]
-  if ARGV.length > 1
-    paths = ARGV.slice(1, ARGV.length)
-  else
-    # TODO: not working yet, but make it read from stdin if there are no filenames passed as arguments
-    paths = $stdin
-  end
+  look_for = ARGV.shift
+  paths = ARGV
+  # if ARGV.length > 1
+  #   paths = ARGV.slice(1, ARGV.length)
+  # else
+  #   # TODO: not working yet, but make it read from stdin if there are no filenames passed as arguments
+  #   paths = $stdin
+  # end
 
   main(look_for, paths,
        search_type: options[:search_type] || SEARCH_DEFAULT,
-       recursive: options[:recursive],
-       ignore: options[:ignore],
        verbose: options[:verbose],
        color: options[:color])
 end
