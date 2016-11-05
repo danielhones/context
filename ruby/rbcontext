@@ -38,9 +38,7 @@ class Matcher
   end
 
   def visit(node)
-    history_added = 0
     lineno = node.location.line rescue nil
-    @history.push(lineno) if !lineno.nil?
 
     match = node_matches(node)
     if match
@@ -51,21 +49,11 @@ class Matcher
       return
     end
 
-    history.push(lineno)
+    history.push(lineno) if !lineno.nil?
     node.children.each do |child|
-      history.push(child.location.line) rescue nil
       visit(child)
-      history.pop
     end
-    history.pop
-
-    # if node.is_a?(AST::Node) && !node.children.nil? && node.children.length > 0
-    #   node.children.each { |n| visit(n) }
-    # end
-
-    if history_added > 0 && @history.length > 0
-      @history.pop(history_added)
-    end
+    history.pop if !lineno.nil?
   end
 end
 
@@ -81,9 +69,15 @@ class LineNoMatcher < Matcher
   
   def node_matches(node)
     lineno = node.location.line rescue nil
-    m = look_for.include?(lineno) ? lineno : nil
-    #puts "LINENO #{lineno}, MATCH: #{m}"
-    m
+    look_for.include?(lineno) ? lineno : nil
+  end
+
+  def color_line(lineno, line, line_color="", end_color="")
+    if look_for.include?(lineno)
+      line_color + line + end_color
+    else
+      line
+    end
   end
 end
 
@@ -94,12 +88,13 @@ class SourceCode
 
   def initialize(source, matcher, look_for, opts={})
     @source = source
-    @filename = opts[:filename]
-    @offset = opts[:offset] || 1
-    @lines = File.readlines(filename)
     @look_for = look_for
+    @filename = opts[:filename]
+    @lines = File.readlines(filename)
+    @offset = opts.fetch(:offset, 1)
     @num_color = opts[:num_color] || ""
     @line_color = opts[:line_color] || ""
+    @number_lines = opts[:number_lines]
     @end_color = (num_color || line_color) ? END_COLOR : ""
     @matcher = matcher.new(look_for, lines, offset)
     @matches = []
@@ -111,7 +106,6 @@ class SourceCode
       matcher.visit(node)
     end
     @matches = matcher.matches.sort.uniq
-    puts "MATCHES: #{matches}"
     matches.map{ |i| format_line(i) }
   end
   
@@ -123,11 +117,15 @@ class SourceCode
     lines.length
   end
 
+  def add_num_color(lineno)
+    num_color + lineno + end_color
+  end
+
   def format_line(lineno)
     colored_line = matcher.color_line(lineno,
                                       line(lineno),
-                                      line_color: line_color,
-                                      end_color: end_color)
+                                      line_color,
+                                      end_color)
     if number_lines
       colored_lineno = add_num_color( lineno.to_s.rjust(numlines.to_s.length) )
       "#{colored_lineno}: #{colored_line}"
@@ -139,14 +137,11 @@ end
 
   
 def main(look_for, files, search_type: SEARCH_DEFAULT,
-         verbose: false, color: false)
+         verbose: false, color: false, number_lines: false)
   num_color = color ? BLUE : nil
   line_color = color ? LIGHT_GREEN : nil
-
-  # check for recursive, walk files/directories
   all_contexts = {}
   skipped_files = {}
-
 
   oldstderr, $stderr = $stderr, StringIO.new  # suppress parse warnings
 
@@ -157,7 +152,7 @@ def main(look_for, files, search_type: SEARCH_DEFAULT,
     context = []
 
     begin
-      source = SourceCode.new(f, matcher, look_for, :filename => filename, :number_lines => true,
+      source = SourceCode.new(f, matcher, look_for, :filename => filename, :number_lines => number_lines,
                               :num_color => num_color, :line_color => line_color)
       context = source.find_context
     rescue SystemExit, Interrupt
@@ -194,9 +189,10 @@ if __FILE__ == $0
                     "Usage: #{File.basename($0)} [options] look_for [paths]\n" +
                     "Options:\n")
     opts.on("-v", "--verbose", "display information about errors and skipped files") { |v| options[:verbose] += 1 }
-    opts.on("-n", "--search-line", "search by line number") { |v| options[:search_type] = SEARCH_LINENO }
+    opts.on("-l", "--search-line", "search by line number") { |v| options[:search_type] = SEARCH_LINENO }
     opts.on("-e", "--search-regex", "search by regular expression") { |v| options[:search_type] = SEARCH_REGEX }
     opts.on("-c", "--color", "highlight line numbers and matches") { |v| options[:color] = true }
+    opts.on("-n", "--number-lines", "highlight line numbers and matches") { |v| options[:number_lines] = true }
     opts.on("-h", "--help", "print this help") { puts opts; exit }
     if ARGV[0].nil?
       puts opts; exit
@@ -205,15 +201,10 @@ if __FILE__ == $0
 
   look_for = ARGV.shift
   paths = ARGV
-  # if ARGV.length > 1
-  #   paths = ARGV.slice(1, ARGV.length)
-  # else
-  #   # TODO: not working yet, but make it read from stdin if there are no filenames passed as arguments
-  #   paths = $stdin
-  # end
 
   main(look_for, paths,
        search_type: options[:search_type] || SEARCH_DEFAULT,
        verbose: options[:verbose],
-       color: options[:color])
+       color: options[:color],
+       number_lines: options[:number_lines])
 end
