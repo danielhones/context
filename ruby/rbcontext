@@ -4,15 +4,13 @@ require 'pp'
 require 'optparse'
 require 'find'
 
-# TODO: Investigate ripper as an alternative to Parser:
-# require 'ripper'
-
 oldstderr, $stderr = $stderr, StringIO.new  # suppress warnings
 require 'parser/current'
 $stderr = oldstderr
 
 
-SEARCH_DEFAULT, SEARCH_LINENO, SEARCH_REGEX = (0..2).to_a
+SEARCH_LINENO, SEARCH_REGEX = (0..1).to_a
+SEARCH_DEFAULT = SEARCH_REGEX
 BLUE = "\e[34m"
 LIGHT_GREEN =  "\e[92m"
 END_COLOR = "\e[0m"
@@ -82,6 +80,22 @@ class LineNoMatcher < Matcher
 end
 
 
+class RegexMatcher < LineNoMatcher
+  def format_look_for(lf)
+    @look_for_re = Regexp.new("(#{lf})")
+    matching_lines = []
+    lines.each_with_index do |l, i|
+      matching_lines.push(i + offset) if @look_for_re.match(l)
+    end
+    matching_lines
+  end
+
+  def color_line(lineno, line, line_color="", end_color="")
+    line.gsub(@look_for_re, line_color + '\1' + end_color)
+  end
+end
+
+
 class SourceCode
   attr_accessor :filename, :lines, :look_for, :num_color, :line_color, :end_color,
                 :offset, :source, :number_lines, :matcher, :matches
@@ -95,8 +109,8 @@ class SourceCode
     @line_color = opts[:line_color] || ""
     @number_lines = opts[:number_lines]
     @end_color = (num_color || line_color) ? END_COLOR : ""
-    @lines = File.readlines(filename)
-    @processed_raw = replace_else.join("")
+    @lines = source.readlines
+    @processed_raw = process_raw.join("")
     @matcher = matcher.new(look_for, lines, offset)
     @matches = []
   end
@@ -110,9 +124,14 @@ class SourceCode
     matches.map{ |i| format_line(i) }
   end
 
-  def replace_else
-    # same missing else bug that pycontext had, same fix:
-    lines.map{ |l| l.sub(/^( *)else\b/, '\1elsif True') }
+  def process_raw
+    # Due to some AST nodes like else and ensure not having a line number,
+    # we replace them with equivalent versions that do include a line
+    # number so they show up in the results.
+    lines.map{ |l|
+      l.sub(/^( *)else\b/, '\1elsif true').
+        sub(/^( *)ensure\b/, '\1ensure true')
+    }
   end
   
   def line(lineno)
@@ -151,62 +170,91 @@ def main(look_for, files, search_type: SEARCH_DEFAULT,
 
   oldstderr, $stderr = $stderr, StringIO.new  # suppress parse warnings
 
-  matcher = LineNoMatcher
+  if search_type == SEARCH_REGEX
+    matcher = RegexMatcher
+  elsif search_type == SEARCH_LINENO
+    matcher = LineNoMatcher
+  end
     
-  files.each do |f|
-    filename = f
-    context = []
-
+  files.each do |file|
     begin
-      source = SourceCode.new(f, matcher, look_for, :filename => filename, :number_lines => number_lines,
-                              :num_color => num_color, :line_color => line_color)
-      context = source.find_context
-    rescue SystemExit, Interrupt
-      raise
-    rescue => e
-      if verbose == 1
-        skipped_files[f] = e.inspect
-      elsif verbose == 2
-        skipped_files[f] = e.inspect + "\n#{e.backtrace.join("\n")}\n\n"
+      f = File.open(file)
+      filename = f.path || "<stdin>"
+      context = []
+
+      begin
+        source = SourceCode.new(f, matcher, look_for, :filename => filename,
+                                :number_lines => number_lines, :num_color => num_color,
+                                :line_color => line_color)
+        context = source.find_context
+      rescue SystemExit, Interrupt
+        raise
+      rescue => e
+        if verbose == 1
+          skipped_files[f] = e.inspect
+        elsif verbose == 2
+          skipped_files[f] = e.inspect + "\n#{e.backtrace.join("\n")}\n\n"
+        end
+        next
       end
-      next
+      next if context.length == 0
+
+      puts ""
+      puts "#{filename}\n\n" if files.length > 1
+      puts context.join("")
+      puts ""
+
+      $stderr = oldstderr
+
+      if verbose > 0 && skipped_files.length > 0
+        puts "Skipped these files due to errors:"
+        skipped_files.each { |k, v| puts "#{k}:  #{v}" }
+      end
+    ensure
+      f.close
     end
-    next if context.length == 0
-
-    puts ""
-    puts "#{filename}\n\n" if files.length > 1
-    puts context.join("")
-    puts ""
   end
-  $stderr = oldstderr
 
-  if verbose > 0 && skipped_files.length > 0
-    puts "Skipped these files due to errors:"
-    skipped_files.each { |k, v| puts "#{k}:  #{v}" }
-  end
-  return all_contexts
+  all_contexts
 end
 
 
 if __FILE__ == $0
   options = {:verbose => 0}
   OptionParser.new do |opts|
-    opts.set_banner("Usage: #{File.basename($0)} [options] look_for [paths]\n\n" +
-                    "Find lines in a Ruby source file and the context they're in\n\n" +
+    opts.set_banner("Usage: #{File.basename($0)} [options] look_for [paths]\n\n" \
+                    "Find lines in a Ruby source file and the context they're in\n\n" \
                     "Options:\n")
-    opts.on("-v", "--verbose", "display information about errors and skipped files") { |v| options[:verbose] += 1 }
-    opts.on("-l", "--search-line", "search by line number") { |v| options[:search_type] = SEARCH_LINENO }
-    opts.on("-e", "--search-regex", "search by regular expression") { |v| options[:search_type] = SEARCH_REGEX }
-    opts.on("-c", "--color", "highlight line numbers and matches") { |v| options[:color] = true }
-    opts.on("-n", "--number-lines", "show line numbers in results") { |v| options[:number_lines] = true }
-    opts.on("-h", "--help", "print this help") { puts opts; exit }
+    opts.on("-v", "--verbose",
+            "Display information about errors and skipped files") { |v|
+      options[:verbose] += 1 }
+    opts.on("-l", "--search-line",
+            "Search by line number.  Can take a single integer or " \
+            "a Ruby list of integers as the look_for argument") { |v|
+      options[:search_type] = SEARCH_LINENO }
+    opts.on("-e", "--search-regex", "Search by regular expression") { |v|
+      options[:search_type] = SEARCH_REGEX }
+    opts.on("-c", "--color", "Highlight line numbers and matches") { |v|
+      options[:color] = true }
+    opts.on("-n", "--number-lines", "Show line numbers in results") { |v|
+      options[:number_lines] = true }
+    opts.on("-h", "--help", "Print this help") { puts opts; exit }
     if ARGV[0].nil?
       puts opts; exit
     end
   end.parse!
 
-  look_for = ARGV.shift
-  paths = ARGV  # TODO: switch to using ARGF here
+  raw_look_for = ARGV.shift
+  look_for = raw_look_for
+  if options[:search_type] == SEARCH_LINENO
+    look_for = eval(raw_look_for)
+  end
+
+  if ARGV.length ==0
+    paths = [$stdin.fileno]
+  else
+    paths = ARGV
+  end
 
   main(look_for, paths,
        search_type: options[:search_type] || SEARCH_DEFAULT,
