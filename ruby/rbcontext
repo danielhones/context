@@ -4,9 +4,19 @@ require 'pp'
 require 'optparse'
 require 'find'
 
-oldstderr, $stderr = $stderr, StringIO.new  # suppress warnings
-require 'parser/current'
-$stderr = oldstderr
+
+# suppress warnings from Parser about Ruby versions:
+oldstderr, $stderr = $stderr, StringIO.new
+begin
+  require 'parser/current'
+rescue LoadError => e
+  puts 'Could not load parser library.  You probably need to install ' \
+       'the Parser gem (try "gem install parser")'
+  exit(1)
+ensure
+  $stderr = oldstderr
+end
+
 
 
 SEARCH_LINENO, SEARCH_REGEX = (0..1).to_a
