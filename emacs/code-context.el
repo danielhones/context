@@ -12,37 +12,46 @@
   (cadr (assoc major-mode context-script-map)))
 
 (defun current-line-number ()
-    (line-number-at-pos (point)))
+  (line-number-at-pos (point)))
+
+(defun run-command-in-context-window (source-code command)
+  (let ((context-buffer (get-buffer-create "*Context*"))
+        (mode major-mode))
+    (display-buffer context-buffer)
+    (with-current-buffer context-buffer
+      (erase-buffer)
+      (insert (concat command "\n"))
+      (funcall mode)
+      (start-process-shell-command "context" context-buffer command)
+      (process-send-string "context" source-code)
+      (process-send-eof "context")
+      (stop-process "context"))))
 
 (defun show-line-context ()
   "Show context for the current line"
   (interactive)
   (save-excursion
     (let* ((look-for (number-to-string (current-line-number)))
-           (cmd (combine-and-quote-strings (list (context-script) "-nl" look-for)))
-           (context-buffer (get-buffer-create "*Context*")))
-      (mark-whole-buffer)
-      (if look-for (shell-command-on-region (region-beginning) (region-end) cmd context-buffer)))))
+           (cmd (combine-and-quote-strings (list (context-script) "-nl" look-for))))
+      (cond (look-for (run-command-in-context-window (buffer-string) cmd))))))
 
 (defun show-regex-context (look-for)
   "Show context using the look-for argument as a regex"
   (interactive "sLook for: ")
   (save-excursion
     (let ((cmd (combine-and-quote-strings (list (context-script) "-ne" look-for)))
-          (context-buffer (get-buffer-create "*Context*")))
-      (mark-whole-buffer)
-      (if look-for (shell-command-on-region (region-beginning) (region-end) cmd context-buffer)))))
+          (cond (look-for (run-command-in-context-window (buffer-string) cmd)))))))
 
 (defun show-at-point-context ()
   "Show context for the symbol currently at point"
   (interactive)
   (save-excursion
-    (let* ((look-for (concat "'\b" (thing-at-point 'symbol t) "\b'"))
-           (cmd (combine-and-quote-strings (list (context-script) "-ne" look-for)))
-           (context-buffer (get-buffer-create "*Context*")))
-      (mark-whole-buffer)
-      (if look-for (shell-command-on-region (region-beginning) (region-end) cmd context-buffer)
-        (message "no symbol at point")))))
+    (let* ((look-for (thing-at-point 'symbol t))
+           (cmd (combine-and-quote-strings (list (context-script) "-ne" look-for))))
+      (cond (look-for
+             (run-command-in-context-window (buffer-string) cmd))
+            (t
+             (message "no symbol at point"))))))
 
 (defun set-context-keybindings ()
   (global-set-key (kbd (concat context-keybinding-prefix "l")) 'show-line-context)
