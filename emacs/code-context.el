@@ -16,16 +16,20 @@
 
 (defun run-command-in-context-window (source-code command)
   (let ((context-buffer (get-buffer-create "*Context*"))
+        (context-window (get-buffer-window "*Context*"))
         (mode major-mode))
     (display-buffer context-buffer)
     (with-current-buffer context-buffer
+      (setq buffer-read-only nil)
       (erase-buffer)
       (insert (concat command "\n"))
       (funcall mode)
       (start-process-shell-command "context" context-buffer command)
       (process-send-string "context" source-code)
       (process-send-eof "context")
-      (stop-process "context"))))
+      (stop-process "context")
+      (set-window-point context-window (point-max))
+      (setq buffer-read-only t))))
 
 (defun show-line-context ()
   "Show context for the current line"
