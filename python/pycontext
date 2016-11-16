@@ -179,9 +179,10 @@ def main(look_for, files, search_type=None, ignore=None,
                                 number_lines=number_lines)
             context = source.find_context()
             if context:
-                sys.stdout.write("\n" + f.name + "\n\n" +
-                                 "".join(result) +
-                                 "\n")
+                output = ["\n", f.name, "\n\n"] if len(files) > 1 else ["\n"]
+                output += context
+                output.append("\n")
+                sys.stdout.write("".join(output))
                 all_contexts[f.name] = context
         except Exception as e:
             skipped_files[f.name] = e

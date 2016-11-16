@@ -108,7 +108,11 @@ class SourceCode
     @num_color = opts[:num_color] || ""
     @line_color = opts[:line_color] || ""
     @number_lines = opts[:number_lines]
-    @end_color = (num_color || line_color) ? END_COLOR : ""
+    if (@num_color && @num_color != "") || (@line_color && @line_color != "")
+      @end_color = END_COLOR
+    else
+      @end_color = ""
+    end
     @lines = source.readlines
     @processed_raw = process_raw.join("")
     @matcher = matcher.new(look_for, lines, offset)
