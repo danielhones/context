@@ -28,7 +28,6 @@
       (process-send-string "context" source-code)
       (process-send-eof "context")
       (stop-process "context")
-      (set-window-point context-window (point-max))
       (setq buffer-read-only t))))
 
 (defun show-line-context ()
@@ -43,14 +42,14 @@
   "Show context using the look-for argument as a regex"
   (interactive "sLook for: ")
   (save-excursion
-    (let ((cmd (combine-and-quote-strings (list (context-script) "-ne" look-for)))
-          (cond (look-for (run-command-in-context-window (buffer-string) cmd)))))))
+    (let ((cmd (combine-and-quote-strings (list (context-script) "-ne" look-for))))
+          (cond (look-for (run-command-in-context-window (buffer-string) cmd))))))
 
 (defun show-at-point-context ()
   "Show context for the symbol currently at point"
   (interactive)
   (save-excursion
-    (let* ((look-for (thing-at-point 'symbol t))
+    (let* ((look-for (concat "\\b" (thing-at-point 'symbol t) "\\b"))
            (cmd (combine-and-quote-strings (list (context-script) "-ne" look-for))))
       (cond (look-for
              (run-command-in-context-window (buffer-string) cmd))
