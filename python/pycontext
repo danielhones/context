@@ -162,7 +162,6 @@ def main(look_for, files, search_type=None, ignore=None,
     if search_type is None:
         search_type = SEARCH_DEFAULT
 
-    # TODO: need to make this handle the recursive option
     if type(files) != list:
         files = [files]
 
@@ -172,7 +171,6 @@ def main(look_for, files, search_type=None, ignore=None,
         matcher = LineNoMatcher
 
     for f in files:
-        # TODO: need to handle the ignore option here
         try:
             source = SourceCode(f, matcher, look_for, filename=f.name,
                                 line_color=line_color, num_color=num_color,

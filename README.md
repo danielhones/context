@@ -1,6 +1,6 @@
 # Context
 
-See lines of code in context.  Sort of like grep that also shows you the branch that leads to a particular line or function call/object reference.  Imagine working inside a 5th or 6th nested if/else block with each block taking up more than a page of screen.  Not a great situation, but it happens sometimes.  It would be nice to have a bird's-eye view of what if/elif clauses lead to the line you're working on, without the clutter of the in-between lines of code and tracing through it manually.  That's what this does.
+See lines of code in context by folding/hiding irrelevant lines.  Sort of like grep that also shows you the branch that leads to a particular line or function call/object reference.  Imagine working inside a 5th or 6th nested if/else block with each block taking up more than a page of screen.  Not a great situation, but it happens sometimes.  It would be nice to have a bird's-eye view of what if/elif clauses lead to the line you're working on, without the clutter of the in-between lines of code and tracing through it manually.  That's what this does.
 
 Right now there are tools for Python and Ruby, each using native parsers to build the abstract syntax tree.  This might be a questionable decision since it means maintaining the same program in two different languages... So that might eventually change if I find a good library/libraries for parsing each different target language and can write something to provide a shared interface for them across languages.  Until then, each file is only around 200 lines so it's not so bad yet.
 
@@ -34,7 +34,7 @@ And here's using pycontext to do the same thing:
 
 # Usage
 
-`pycontext` and `rbcontext` use the same command-line interface.  You can see the options from the command line with the `-h` flag:
+`pycontext` and `rbcontext` use the same command-line interface.  They read input from a file or list of files specified on the command-line or from stdin if there are no files listed.  There is no recursive option like there is with grep but you can get the same functionality by using `find` or something similar in a sub-shell: `pycontext -n skipped_files $(find . -name '*.py')`.  You can see the complete list of options from the command line with the `-h` flag:
 
 ```
 $ pycontext -h
