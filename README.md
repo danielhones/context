@@ -83,6 +83,12 @@ Options:
 `gem install parser`
 
 
+## Known Bugs
+
+- Due to the hack of replacing `else` by `elif True`, a Python file that uses try/except/else will not parse (because the `else` is subbed with `elif True` which is a SyntaxError).  Hopefully I'll fix this soon.  The reason for this hack in the first place is that else lines have no line number in Python's AST parser.
+- The same bug exists in rbcontext with begin/rescue/else in Ruby files.
+
+
 ## rbcontext quirks
 
 `rbcontext` does a few things a little strangely, but most of the bugs have been fixed and these remain as harmless oddities:
