@@ -16,8 +16,12 @@ LIGHT_GREEN =  "\033[92m"
 END_COLOR = "\033[0m"
 
 
+def insert_term_color(string, start, end, color):
+    return string[:start] + color + string[start:end] + END_COLOR + string[end:]
+
+
 class Matcher(ast.NodeVisitor):
-    def __init__(self, look_for, lines, offset):
+    def __init__(self, look_for, lines, offset=1):
         self.lines = lines
         self.offset = offset
         self.look_for = self.format_look_for(look_for)
@@ -27,7 +31,7 @@ class Matcher(ast.NodeVisitor):
     def format_look_for(self, look_for):
         return look_for
 
-    def color_line(self, lineno, line, line_color="", end_color=""):
+    def color_line(self, lineno, line, line_color=None):
         return line
 
     def generic_visit(self, node):
@@ -62,9 +66,9 @@ class LineNoMatcher(Matcher):
         else:
             return [int(i) for i in look_for]
 
-    def color_line(self, lineno, line, line_color="", end_color=""):
-        if lineno in self.look_for:
-            return line_color + line + end_color
+    def color_line(self, lineno, line, line_color=None):
+        if lineno in self.look_for and line_color is not None:
+            return insert_term_color(line, 0, len(line), line_color)
         return line
 
     def node_matches(self, node):
@@ -78,15 +82,16 @@ class LineNoMatcher(Matcher):
 class RegexMatcher(LineNoMatcher):
     def format_look_for(self, look_for):
         self.look_for_re = re.compile("({})".format(look_for))
+        # This looks strange, but the idea here is to find the lines that match our regex,
+        # then use the LineNoMatcher.node_matches to indicate that those lines match
         matching_lines = [i + self.offset for i, j in enumerate(self.lines)
                           if self.look_for_re.search(j)]
         return matching_lines
 
-    def color_line(self, lineno, line, line_color="", end_color=""):
+    def color_line(self, lineno, line, line_color=None):
         match = self.look_for_re.search(line)
-        if match:
-            matched = line_color + match.group(0) + end_color
-            return self.look_for_re.sub(matched, line)
+        if match and line_color is not None:
+            return insert_term_color(line, match.span()[0], match.span()[1], line_color)
         return line
 
 
@@ -101,11 +106,10 @@ class SourceCode(object):
         self.filename = filename
         self.lines = []
         self.look_for = look_for
-        self.num_color = num_color or ""
-        self.line_color = line_color or ""
+        self.num_color = num_color
+        self.line_color = line_color
         self.number_lines = number_lines
         self.offset = offset
-        self.end_color = END_COLOR if (num_color or line_color) else ""
         self.lines = self.source.readlines()
         self._processed_lines = self.replace_else()
         self._processed_raw = "".join(self._processed_lines)
@@ -134,14 +138,15 @@ class SourceCode(object):
         return len(self.lines)
 
     def add_num_color(self, lineno):
-        return self.num_color + lineno + self.end_color
+        if self.num_color is not None:
+            return insert_term_color(lineno, 0, len(lineno), self.num_color)
+        return lineno
 
     def format_line(self, lineno):
         line = self.line(lineno)
         colored_line = self.matcher.color_line(lineno,
                                                line,
-                                               line_color=self.line_color,
-                                               end_color=self.end_color)
+                                               line_color=self.line_color)
         if self.number_lines:
             num_padding = len(str(self.numlines))
             colored_num = self.add_num_color(str(lineno).rjust(num_padding))
@@ -150,8 +155,8 @@ class SourceCode(object):
             return colored_line
 
 
-def main(look_for, files, search_type=None, ignore=None,
-         verbose=False, color=False, number_lines=False):
+def main(look_for, files, search_type=None, ignore=None, verbose=False, color=False,
+         number_lines=False, output=sys.stdout, errout=sys.stderr):
     """
     look_for is a string, files is a list of paths
     """
@@ -177,17 +182,17 @@ def main(look_for, files, search_type=None, ignore=None,
                                 number_lines=number_lines)
             context = source.find_context()
             if context:
-                output = ["\n", f.name, "\n\n"] if len(files) > 1 else ["\n"]
-                output += context
-                output.append("\n")
-                sys.stdout.write("".join(output))
+                result = ["\n", f.name, "\n\n"] if len(files) > 1 else ["\n"]
+                result += context
+                result.append("\n")
+                output.write("".join(result))
                 all_contexts[f.name] = context
         except Exception as e:
             skipped_files[f.name] = e
 
     if verbose and skipped_files:
-        sys.stdout.write("\nSkipped these files due to errors:\n")
-        [sys.stdout.write("{}: {}\n".format(key, skipped_files[key])) for key in skipped_files]
+        errout.write("\nSkipped these files due to errors:\n")
+        [errout.write("{}: {}\n".format(key, skipped_files[key])) for key in skipped_files]
 
     return all_contexts
 
@@ -198,14 +203,12 @@ if __name__ == "__main__":
     )
     parser.add_argument("look_for",
                         help=("Object to look for in the file.  For certain search"
-                              "types this can be a comma-separated list or a Python"
-                              "list such as [6,8,10]"))
+                              "types this can be a comma-separated list such as \"6,8,10\""))
     parser.add_argument("paths",
                         nargs="*",
                         type=argparse.FileType('r'),
                         default=sys.stdin,
-                        help=("Files (or directories if -r option) to look in. "
-                              "If there is no argument passed here, read from STDIN"))
+                        help=("Files to look in. If there is no argument passed here, read from STDIN"))
     parser.add_argument("-c", "--color", action="store_true", help="colorize output")
     parser.add_argument("-n", "--number-lines", action="store_true", dest="number_lines",
                         help="include line numbers in results")
@@ -221,7 +224,7 @@ if __name__ == "__main__":
     look_for = args.look_for
     if args.search_type == SEARCH_LINENO:
         try:
-            look_for = eval(args.look_for)
+            look_for = args.look_for.split(',')
         except:
             pass
 
