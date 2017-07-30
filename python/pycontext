@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-import ast
 import argparse
-import sys
-import os
+import ast
+import asttokens
 import glob
-import re
 import itertools
+import os
+import re
+import sys
 import traceback
 
 
@@ -111,24 +112,17 @@ class SourceCode(object):
         self.number_lines = number_lines
         self.offset = offset
         self.lines = self.source.readlines()
-        self._processed_lines = self.replace_else()
-        self._processed_raw = "".join(self._processed_lines)
+        self.raw_source = "".join(self.lines)
         self.matcher = matcher(self.look_for, self.lines, self.offset)
         self.matches = []
 
     def find_context(self):
-        tree = ast.parse(self._processed_raw, filename=self.filename)
-        for node in ast.iter_child_nodes(tree):
+        #tree = ast.parse(self.raw, filename=self.filename)
+        parsed = asttokens.ASTTokens(self.raw_source, parse=True)
+        for node in ast.iter_child_nodes(parsed.tree):
             self.matcher.visit(node)
         self.matches = sorted(set(self.matcher.matches))
         return [self.format_line(i) for i in self.matches]
-
-    def replace_else(self):
-        # To get around the bug/feature of ast that an else line has no line number,
-        # we replace it with 'elif True' before parsing, but display the original
-        # line in the results
-        else_re = re.compile('^(?P<space> *)(else:)')
-        return [else_re.sub(r"\g<space>elif True:", i) for i in self.lines]
 
     def line(self, lineno):
         return self.lines[lineno - self.offset]

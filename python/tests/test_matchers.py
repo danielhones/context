@@ -5,8 +5,19 @@ from helpers import *
 from context import LineNoMatcher, RegexMatcher, LIGHT_GREEN, END_COLOR
 
 
-class TestLineNoMatcherFormatLookFor(unittest.TestCase):
+class TestMatcherGenericVisit(unittest.TestCase):
     pass
+
+
+class TestLineNoMatcherFormatLookFor(unittest.TestCase):
+    def test_look_for_single_line_number(self):
+        matcher = LineNoMatcher(10, [])
+        self.assertEqual(matcher.look_for, [10])
+
+    def test_look_for_multiple_line_numbers(self):
+        line_nos = [10, 19, 31, 42]
+        matcher = LineNoMatcher(line_nos, [])
+        self.assertEqual(matcher.look_for, line_nos)
 
 
 class TestLineNoMatcherNodeMatches(unittest.TestCase):

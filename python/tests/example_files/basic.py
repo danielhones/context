@@ -9,9 +9,14 @@ class FooClass:
     def bar(self):
         print("in bar")
         if self.some_variable > self.other_variable:
-            self.other_variable = self.some_variable
+            a = 23
+            b = 12
+            c = a + b
+            self.other_variable = self.some_variable * c
+            print("self.other_variable =", self.other_variable)
         elif self.some_variable < self.other_variable:
             self.some_variable = self.other_variable
+            print("self.other_variable =", self.other_variable)
         else:
             print("I give up")
 
