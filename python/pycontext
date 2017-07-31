@@ -114,13 +114,15 @@ class SourceCode(object):
         self.raw_source = "".join(self.lines)
         self.matcher = matcher_class(self.look_for, self.lines, self.offset)
         self.matches = []
+        self.context = None
 
     def find_context(self):
         tree = ast.parse(self.raw_source, filename=self.filename)
         for node in ast.iter_child_nodes(tree):
             self.matcher.visit(node)
         self.matches = sorted(set(self.matcher.matches))
-        return [self.format_line(i) for i in self.matches]
+        self.context = [self.format_line(i) for i in self.matches]
+        return self.context
 
     def line(self, lineno):
         return self.lines[lineno - self.offset]
