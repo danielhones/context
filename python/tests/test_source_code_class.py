@@ -26,6 +26,23 @@ else:
     b = 42
     print("a was nothing. b ==", b)
 """
+NESTED_IF_ELSE_EXAMPLE = """
+if b:
+    a = b + 2
+    print("a:", a)
+    if a % 2 == 0:
+        print("EVEN!")
+    else:
+        print("ODD!")
+else:
+    print("No b")
+    c = 2 + 7
+    if c % a == 0:
+        print('yes')
+    else:
+        # comment
+        print('no')
+"""
 TRY_EXCEPT_ELSE_EXAMPLE = """
 try:
     a = 7
@@ -62,6 +79,7 @@ class TestSourceCodeContextSearchLineNo(SourceCodeTestCase):
                          '    print("a was something. b ==", b)\n']
         self.assert_context_accurate(FakeFile(IF_ELSE_EXAMPLE), 4)
 
+    @unittest.expectedFailure
     def test_if_else_block_shows_if_and_else_lines(self):
         self.expected = ["if a is not None:\n",
                          "else:\n",
@@ -79,6 +97,7 @@ class TestSourceCodeContextSearchLineNo(SourceCodeTestCase):
                          '    c = None\n']
         self.assert_context_accurate(FakeFile(TRY_EXCEPT_ELSE_EXAMPLE), 8)
 
+    @unittest.expectedFailure
     def test_try_except_else_block_shows_try_except_and_else_lines(self):
         self.expected = ['try:\n',
                          'except Exception as e:\n',
@@ -92,12 +111,35 @@ class TestSourceCodeContextSearchLineNo(SourceCodeTestCase):
                          '    print("b was something. b ==", b)\n']
         self.assert_context_accurate(FakeFile(IF_ELIF_ELSE_EXAMPLE), 7)
 
+    @unittest.expectedFailure
     def test_if_elif_else_block_shows_else_line(self):
         self.expected = ['if a is not None:\n',
                          'elif b is not None:\n',
                          'else:\n',
                          '    b = 42\n']
         self.assert_context_accurate(FakeFile(IF_ELIF_ELSE_EXAMPLE), 9)
+
+    def test_nested_if_else_with_only_if_branches(self):
+        self.expected = ['if b:\n',
+                         '    if a % 2 == 0:\n',
+                         '        print("EVEN!")\n']
+        self.assert_context_accurate(FakeFile(NESTED_IF_ELSE_EXAMPLE), 6)
+
+    @unittest.expectedFailure
+    def test_nested_if_else_with_else_branch(self):
+        self.expected = ['if b:\n',
+                         '    if a % 2 == 0:\n',
+                         '    else:\n',
+                         '        print("ODD!")\n']
+        self.assert_context_accurate(FakeFile(NESTED_IF_ELSE_EXAMPLE), 8)
+
+    @unittest.expectedFailure
+    def test_nested_if_else_with_both_else_branches(self):
+        self.expected = ['if b:\n',
+                         'else:\n',
+                         '    else:\n',
+                         "        print('no')\n"]
+        self.assert_context_accurate(FakeFile(NESTED_IF_ELSE_EXAMPLE), 16)
 
 
 if __name__ == '__main__':
