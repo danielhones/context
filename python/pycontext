@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import argparse
 import ast
-import asttokens
 import glob
 import itertools
 import os
@@ -97,7 +96,7 @@ class RegexMatcher(LineNoMatcher):
 
 
 class SourceCode(object):
-    def __init__(self, source, matcher, look_for=None, num_color=None,
+    def __init__(self, source, matcher_class, look_for=None, num_color=None,
                  line_color=None, offset=1, filename='', number_lines=None):
         """
         offset is the difference between the number of the first line
@@ -113,13 +112,12 @@ class SourceCode(object):
         self.offset = offset
         self.lines = self.source.readlines()
         self.raw_source = "".join(self.lines)
-        self.matcher = matcher(self.look_for, self.lines, self.offset)
+        self.matcher = matcher_class(self.look_for, self.lines, self.offset)
         self.matches = []
 
     def find_context(self):
-        #tree = ast.parse(self.raw, filename=self.filename)
-        parsed = asttokens.ASTTokens(self.raw_source, parse=True)
-        for node in ast.iter_child_nodes(parsed.tree):
+        tree = ast.parse(self.raw_source, filename=self.filename)
+        for node in ast.iter_child_nodes(tree):
             self.matcher.visit(node)
         self.matches = sorted(set(self.matcher.matches))
         return [self.format_line(i) for i in self.matches]
