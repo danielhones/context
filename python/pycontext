@@ -34,16 +34,27 @@ def last_block_lineno(node_list):
 
 
 class Else(object):
-    def __init__(self, if_node):
-        self.if_node = if_node
+    def __init__(self, main_node):
+        self.main_node = main_node
         self._linenos = None
 
     def linenos(self):
         if self._linenos is not None:
             return self._linenos
 
-        start = last_block_lineno(self.if_node.body) + 1
-        self._linenos = list(range(start, self.if_node.orelse[0].lineno))
+        start = last_block_lineno(self.main_node.body) + 1
+        self._linenos = list(range(start, self.main_node.orelse[0].lineno))
+        return self._linenos
+
+
+class TryElse(Else):
+    def linenos(self):
+        if self._linenos is not None:
+            return self._linenos
+
+        start = last_block_lineno(self.main_node.handlers) + 1
+        self._linenos =  [i.lineno for i in self.main_node.handlers] + \
+                         list(range(start, self.main_node.orelse[0].lineno))
         return self._linenos
 
 
@@ -62,13 +73,13 @@ class Matcher(ast.NodeVisitor):
     def color_line(self, lineno, line, line_color=None):
         return line
     
-    def make_iterator_IF(self):
+    def make_iterator_for_else(self, else_class=Else):
         """Adapted from Lib/ast.py in CPython source code"""
         def iter_fields(node):
             for field in node._fields:
                 try:
                     if field == 'orelse' and len(getattr(node, field)) > 0:
-                        self.current_elses.append(Else(node))
+                        self.current_elses.append(else_class(node))
                         yield field, getattr(node, field)
                         self.current_elses.pop()
                     else:
@@ -88,18 +99,14 @@ class Matcher(ast.NodeVisitor):
         return iter_child_nodes
 
     def visit_If(self, node):
-        self.generic_visit(node, iter_node_func=self.make_iterator_IF())
-        #self.generic_visit(node)
+        self.generic_visit(node, iter_node_func=self.make_iterator_for_else())
 
     def visit_Try(self, node):
-        #print("visit_Try"); import pdb; pdb.set_trace()
-        self.generic_visit(node)
-        #self.generic_visit(node, iter_node_func=self.make_iterator_IF())
+        self.generic_visit(node, iter_node_func=self.make_iterator_for_else(TryElse))
 
     def generic_visit(self, node, iter_node_func=ast.iter_child_nodes):
         history_added = 0
         if len(self.current_elses) > 0:
-            #import pdb; pdb.set_trace()
             self.history += self.current_elses[-1].linenos()
             history_added += len(self.current_elses[-1].linenos())
 

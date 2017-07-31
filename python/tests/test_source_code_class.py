@@ -64,6 +64,9 @@ finally:
     print("running cleanup")
     sock.close()
 """
+MIXED_TRY_IF_ELSE_EXAMPLE = """
+
+"""
 
 
 class FakeFile(StringIO):
@@ -151,7 +154,6 @@ if True:
                          '    c = None\n']
         self.assert_context_accurate(FakeFile(TRY_EXCEPT_ELSE_EXAMPLE), 8)
 
-    @unittest.expectedFailure
     def test_try_except_else_block_shows_try_except_and_else_lines(self):
         self.expected = ['try:\n',
                          'except Exception as e:\n',
