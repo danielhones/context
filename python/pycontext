@@ -20,6 +20,14 @@ def insert_term_color(string, start, end, color):
     return string[:start] + color + string[start:end] + END_COLOR + string[end:]
 
 
+class Else(object):
+    def __init__(self, if_node):
+        self.if_node = if_node
+
+    def linenos(self):
+        return list(range(self.if_node.body[-1].lineno + 1, self.if_node.orelse[0].lineno))
+
+
 class Matcher(ast.NodeVisitor):
     def __init__(self, look_for, lines, offset=1):
         self.lines = lines
@@ -27,24 +35,63 @@ class Matcher(ast.NodeVisitor):
         self.look_for = self.format_look_for(look_for)
         self.history = []
         self.matches = []
+        self.current_elses = []
 
     def format_look_for(self, look_for):
         return look_for
 
     def color_line(self, lineno, line, line_color=None):
         return line
+    
+    def make_iterator_IF(self):
+        """Adapted from Lib/ast.py in CPython source code"""
+        def iter_fields(node):
+            for field in node._fields:
+                try:
+                    if field == 'orelse' and len(getattr(node, field)) > 0:
+                        self.current_elses.append(Else(node))
+                        yield field, getattr(node, field)
+                        self.current_elses.pop()
+                    else:
+                        yield field, getattr(node, field)
+                except AttributeError:
+                    pass
+ 
+        def iter_child_nodes(node):
+            for name, field in iter_fields(node):
+                if isinstance(field, ast.AST):
+                    yield field
+                elif isinstance(field, list):
+                    for item in field:
+                        if isinstance(item, ast.AST):
+                            yield item
 
-    def generic_visit(self, node):
+        return iter_child_nodes
+
+    def visit_If(self, node):
+        #print("visit_If"); import pdb; pdb.set_trace()
+        self.generic_visit(node, iter_node_func=self.make_iterator_IF())
+
+    def visit_Try(self, node):
+        #print("visit_Try"); import pdb; pdb.set_trace()
+        self.generic_visit(node)
+
+    def generic_visit(self, node, iter_node_func=ast.iter_child_nodes):
+        history_added = 0
+        if len(self.current_elses) > 0:
+            self.history += self.current_elses[-1].linenos()
+            history_added += len(self.current_elses[-1].linenos())
+
         try:
             self.history.append(node.lineno)
-            history_added = 1
+            history_added += 1
         except:
             history_added = False
 
         match = self.node_matches(node)
         if match:
             self.matches = self.matches + self.history + [match]
-        for i in ast.iter_child_nodes(node):
+        for i in iter_node_func(node):
             self.visit(i)
 
         if history_added and len(self.history) > 0:
