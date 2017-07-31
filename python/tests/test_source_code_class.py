@@ -15,6 +15,17 @@ else:
     b = 42
     print("a was nothing. b ==", b)
 """
+IF_ELIF_ELSE_EXAMPLE = """
+if a is not None:
+    b = a * 2
+    print("a was something. b ==", b)
+elif b is not None:
+    b *= 2
+    print("b was something. b ==", b)
+else:
+    b = 42
+    print("a was nothing. b ==", b)
+"""
 TRY_EXCEPT_ELSE_EXAMPLE = """
 try:
     a = 7
@@ -40,7 +51,6 @@ class SourceCodeTestCase(unittest.TestCase):
     def assert_context_accurate(self, test_file, look_for):
         self.source = SourceCode(test_file, self.matcher_type, look_for, filename=test_file.name)
         self.result = self.source.find_context()
-        print("\nRESULT:\n{}".format(self.result))
         self.assertEqual(self.result, self.expected)
 
 
@@ -75,6 +85,19 @@ class TestSourceCodeContextSearchLineNo(SourceCodeTestCase):
                          'else:\n',
                          '    print("Ran successfully")\n']
         self.assert_context_accurate(FakeFile(TRY_EXCEPT_ELSE_EXAMPLE), 12)
+
+    def test_if_elif_else_block_shows_elif_line(self):
+        self.expected = ['if a is not None:\n',
+                         'elif b is not None:\n',
+                         '    print("b was something. b ==", b)\n']
+        self.assert_context_accurate(FakeFile(IF_ELIF_ELSE_EXAMPLE), 7)
+
+    def test_if_elif_else_block_shows_else_line(self):
+        self.expected = ['if a is not None:\n',
+                         'elif b is not None:\n',
+                         'else:\n',
+                         '    b = 42\n']
+        self.assert_context_accurate(FakeFile(IF_ELIF_ELSE_EXAMPLE), 9)
 
 
 if __name__ == '__main__':
