@@ -40,8 +40,13 @@ else:
     if c % a == 0:
         print('yes')
     else:
-        # comment
-        print('no')
+        if False:
+            print("that would be weird")
+        elif None:
+            print("so would this")
+        else:
+            x = 27
+            print('no')
 """
 TRY_EXCEPT_ELSE_EXAMPLE = """
 try:
@@ -55,6 +60,9 @@ except Exception as e:
     print("c == ", str(c))
 else:
     print("Ran successfully")
+finally:
+    print("running cleanup")
+    sock.close()
 """
 
 
@@ -121,13 +129,16 @@ if True:
                          '        print("ODD!")\n']
         self.assert_context_accurate(FakeFile(NESTED_IF_ELSE_EXAMPLE), 8)
 
-    @unittest.expectedFailure
-    def test_nested_if_else_with_both_else_branches(self):
+    def test_nested_if_else_with_all_else_branches(self):
         self.expected = ['if b:\n',
                          'else:\n',
+                         '    if c % a == 0:\n',
                          '    else:\n',
-                         "        print('no')\n"]
-        self.assert_context_accurate(FakeFile(NESTED_IF_ELSE_EXAMPLE), 16)
+                         '        if False:\n',
+                         '        elif None:\n',
+                         '        else:\n',
+                         "            x = 27\n"]
+        self.assert_context_accurate(FakeFile(NESTED_IF_ELSE_EXAMPLE), 20)
 
     def test_try_except_else_block_shows_try_line(self):
         self.expected = ["try:\n",
