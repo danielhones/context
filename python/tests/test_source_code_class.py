@@ -161,7 +161,50 @@ if True:
                          '    print("Ran successfully")\n']
         self.assert_context_accurate(FakeFile(TRY_EXCEPT_ELSE_EXAMPLE), 12)
 
-    # TODO: add test and fix code for a try/except/else/finally
+    def test_try_except_else_finally(self):
+        self.expected = ['try:\n',
+                         'except Exception as e:\n',
+                         'else:\n',
+                         'finally:\n',
+                         '    sock.close()\n']
+        self.assert_context_accurate(FakeFile(TRY_EXCEPT_ELSE_EXAMPLE), 15)
+
+    def test_try_except_finally_without_else(self):
+        test_file = FakeFile("""
+try:
+    a = 2
+    b = 3
+except BaseException as e:
+    print("error:", e)
+    print("continuing")
+finally:
+    print("finally")
+""")
+        self.expected = ['try:\n',
+                         'except BaseException as e:\n',
+                         'finally:\n',
+                         '    print("finally")\n']
+        self.assert_context_accurate(test_file, 9)
+
+    @unittest.expectedFailure
+    def test_try_finally_without_except_or_else(self):
+        test_file = FakeFile("""
+try:
+    a = 2
+    b = 3
+finally:
+    a = None
+    print("finally")
+""")
+        self.expected = ['try:\n',
+                         'finally:\n',
+                         '    print("finally")\n']
+        self.assert_context_accurate(test_file, 7)
+
+    @unittest.skip('test not written')
+    def test_try_with_multiple_exception_handlers(self):
+        pass
+
 
 
 if __name__ == '__main__':

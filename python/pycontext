@@ -37,23 +37,41 @@ class Else():
         self.main_node = main_node
         self._linenos = None
 
+    def calc_linenos(self):
+        start = last_block_lineno(self.main_node.body) + 1
+        linenos = list(range(start, self.main_node.orelse[0].lineno))
+        return linenos
+
     def linenos(self):
         if self._linenos is not None:
             return self._linenos
 
-        start = last_block_lineno(self.main_node.body) + 1
-        self._linenos = list(range(start, self.main_node.orelse[0].lineno))
+        self._linenos = self.calc_linenos()
         return self._linenos
 
 
 class TryElse(Else):
+    def calc_linenos(self):
+        start = last_block_lineno(self.main_node.handlers) + 1
+        end = self.main_node.orelse[0].lineno
+        linenos =  [i.lineno for i in self.main_node.handlers] + \
+                   list(range(start, end))
+        return linenos
+
+
+class TryFinally(TryElse):
     def linenos(self):
         if self._linenos is not None:
             return self._linenos
 
-        start = last_block_lineno(self.main_node.handlers) + 1
-        self._linenos =  [i.lineno for i in self.main_node.handlers] + \
-                         list(range(start, self.main_node.orelse[0].lineno))
+        if len(self.main_node.orelse ) > 0:
+            else_lines = super().calc_linenos()
+            start = last_block_lineno(self.main_node.orelse) + 1
+        else:
+            else_lines = []
+            start = last_block_lineno(self.main_node.handlers)
+
+        self._linenos = else_lines + list(range(start, self.main_node.finalbody[0].lineno))
         return self._linenos
 
 
@@ -72,13 +90,16 @@ class Matcher(ast.NodeVisitor):
     def color_line(self, lineno, line, line_color=None):
         return line
     
-    def make_iterator_for_else(self, else_class=Else):
-        """Adapted from Lib/ast.py in CPython source code"""
+    def make_iterator_for_else(self, handlers):
+        """Adapted from Lib/ast.py in CPython source code
+
+        handlers should be a dict of the form {<field name>: <class to call>}
+        """
         def iter_fields(node):
             for field in node._fields:
                 try:
-                    if field == 'orelse' and len(getattr(node, field)) > 0:
-                        self.current_elses.append(else_class(node))
+                    if field in handlers and len(getattr(node, field)) > 0:
+                        self.current_elses.append(handlers[field](node))
                         yield field, getattr(node, field)
                         self.current_elses.pop()
                     else:
@@ -98,10 +119,11 @@ class Matcher(ast.NodeVisitor):
         return iter_child_nodes
 
     def visit_If(self, node):
-        self.generic_visit(node, iter_node_func=self.make_iterator_for_else())
+        self.generic_visit(node, iter_node_func=self.make_iterator_for_else({'orelse': Else}))
 
     def visit_Try(self, node):
-        self.generic_visit(node, iter_node_func=self.make_iterator_for_else(TryElse))
+        self.generic_visit(node, iter_node_func=self.make_iterator_for_else(
+            {'orelse': TryElse, 'finalbody': TryFinally}))
 
     def generic_visit(self, node, iter_node_func=ast.iter_child_nodes):
         history_added = 0
