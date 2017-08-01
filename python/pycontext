@@ -20,20 +20,19 @@ def insert_term_color(string, start, end, color):
     return string[:start] + color + string[start:end] + END_COLOR + string[end:]
 
 
-
 def last_block_lineno(node_list):
-    """Given a list of ast.AST nodes, return the last line number, or as close as we can get"""
+    """Given a list of ast.AST nodes, return the last line number or as close as we can get"""
     node = node_list[-1]
     lineno = node.lineno
     for name, field in ast.iter_fields(node):
-        if isinstance(field, list):
+        if isinstance(field, list) and len(field) > 0:
             candidate = last_block_lineno(field)
             if candidate > lineno:
                 lineno = candidate
     return lineno
 
 
-class Else(object):
+class Else():
     def __init__(self, main_node):
         self.main_node = main_node
         self._linenos = None
@@ -176,7 +175,7 @@ class RegexMatcher(LineNoMatcher):
         return line
 
 
-class SourceCode(object):
+class SourceCode():
     def __init__(self, source, matcher_class, look_for=None, num_color=None,
                  line_color=None, offset=1, filename='', number_lines=None):
         """
@@ -230,7 +229,7 @@ class SourceCode(object):
             return colored_line
 
 
-def main(look_for, files, search_type=None, ignore=None, verbose=False, color=False,
+def main(look_for, files, search_type=None, ignore=None, verbose=0, color=False,
          number_lines=False, output=sys.stdout, errout=sys.stderr):
     """
     look_for is a string, files is a list of paths
@@ -263,9 +262,12 @@ def main(look_for, files, search_type=None, ignore=None, verbose=False, color=Fa
                 output.write("".join(result))
                 all_contexts[f.name] = context
         except Exception as e:
-            skipped_files[f.name] = e
+            if verbose == 1:
+                skipped_files[f.name] = e
+            elif verbose == 2:
+                skipped_files[f.name] = "{}\n{}".format(e, traceback.format_exc())
 
-    if verbose and skipped_files:
+    if verbose > 0 and skipped_files:
         errout.write("\nSkipped these files due to errors:\n")
         [errout.write("{}: {}\n".format(key, skipped_files[key])) for key in skipped_files]
 
@@ -292,10 +294,9 @@ if __name__ == "__main__":
                         help="Search by line number.  Allows a list as the look_for argument")
     parser.add_argument("-e", "--search-regex", dest="search_type", action="store_const",
                         const=SEARCH_REGEX, help="search by regexp")
-    parser.add_argument("-v", "--verbose", action="store_true",
+    parser.add_argument("-v", "--verbose", action="count", default=0,
                         help="Display information about errors and skipped files")
     args = parser.parse_args()
-
     look_for = args.look_for
     if args.search_type == SEARCH_LINENO:
         try:
