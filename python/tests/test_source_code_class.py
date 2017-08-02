@@ -174,19 +174,21 @@ if True:
 try:
     a = 2
     b = 3
-except BaseException as e:
+except KeyboardInterrupt:
+    sys.exit(0)
+except TypeError as e:
     print("error:", e)
     print("continuing")
 finally:
     print("finally")
 """)
         self.expected = ['try:\n',
-                         'except BaseException as e:\n',
+                         'except KeyboardInterrupt:\n',
+                         'except TypeError as e:\n',
                          'finally:\n',
                          '    print("finally")\n']
-        self.assert_context_accurate(test_file, 9)
+        self.assert_context_accurate(test_file, 11)
 
-    @unittest.expectedFailure
     def test_try_finally_without_except_or_else(self):
         test_file = FakeFile("""
 try:
@@ -200,11 +202,6 @@ finally:
                          'finally:\n',
                          '    print("finally")\n']
         self.assert_context_accurate(test_file, 7)
-
-    @unittest.skip('test not written')
-    def test_try_with_multiple_exception_handlers(self):
-        pass
-
 
 
 if __name__ == '__main__':

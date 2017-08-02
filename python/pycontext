@@ -59,19 +59,20 @@ class TryElse(Else):
         return linenos
 
 
-class TryFinally(TryElse):
-    def linenos(self):
-        if self._linenos is not None:
-            return self._linenos
+class TryFinally(Else):
+    def calc_linenos(self):
+        include_lines = []
 
-        if len(self.main_node.orelse ) > 0:
-            else_lines = super().calc_linenos()
+        if len(self.main_node.orelse) > 0:
+            include_lines.extend(TryElse.calc_linenos(self))
             start = last_block_lineno(self.main_node.orelse) + 1
+        elif len(self.main_node.handlers) > 0:
+            include_lines.extend([i.lineno for i in self.main_node.handlers])
+            start = last_block_lineno(self.main_node.handlers[-1].body) + 1
         else:
-            else_lines = []
-            start = last_block_lineno(self.main_node.handlers)
+            start = last_block_lineno(self.main_node.body) + 1
 
-        self._linenos = else_lines + list(range(start, self.main_node.finalbody[0].lineno))
+        self._linenos = include_lines + list(range(start, self.main_node.finalbody[0].lineno))
         return self._linenos
 
 
@@ -140,7 +141,6 @@ class Matcher(ast.NodeVisitor):
         match = self.node_matches(node)
         if match:
             self.matches = self.matches + self.history + [match]
-
             if len(self.current_elses) > 0:
                 for _ in range(len(self.current_elses[-1].linenos())):
                     self.history.pop()
