@@ -91,7 +91,7 @@ class Matcher(ast.NodeVisitor):
     def color_line(self, lineno, line, line_color=None):
         return line
     
-    def make_iterator_for_else(self, handlers):
+    def make_special_iterator(self, handlers):
         """Adapted from Lib/ast.py in CPython source code
 
         handlers should be a dict of the form {<field name>: <class to call>}
@@ -120,10 +120,10 @@ class Matcher(ast.NodeVisitor):
         return iter_child_nodes
 
     def visit_If(self, node):
-        self.generic_visit(node, iter_node_func=self.make_iterator_for_else({'orelse': Else}))
+        self.generic_visit(node, iter_node_func=self.make_special_iterator({'orelse': Else}))
 
     def visit_Try(self, node):
-        self.generic_visit(node, iter_node_func=self.make_iterator_for_else(
+        self.generic_visit(node, iter_node_func=self.make_special_iterator(
             {'orelse': TryElse, 'finalbody': TryFinally}))
 
     def generic_visit(self, node, iter_node_func=ast.iter_child_nodes):
