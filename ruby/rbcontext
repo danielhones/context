@@ -26,7 +26,24 @@ LIGHT_GREEN =  "\e[92m"
 END_COLOR = "\e[0m"
 
 
-class Matcher
+def insert_term_color(string, start, _end, color)
+  string[0, start] + color + string[start, _end-start] + END_COLOR + string[_end, string.length-_end]
+end
+
+
+class NodeVisitor
+  def visit(node)
+    return if !node.is_a?(AST::Node)
+    method_name = "visit_#{node.type.to_s}"
+    respond_to?(method_name) ? send(method_name, node) : generic_visit(node)
+  end
+
+  def generic_visit
+  end
+end
+
+
+class Matcher < NodeVisitor
   attr_accessor :lines, :offset, :look_for, :history, :matches
 
   def initialize(look_for, lines, offset)
@@ -45,7 +62,7 @@ class Matcher
     line
   end
 
-  def visit(node)
+  def generic_visit(node)
     lineno = node.location.line rescue nil
 
     match = node_matches(node)
@@ -174,9 +191,9 @@ class SourceCode
   end
 end
 
-  
-def main(look_for, files, search_type: SEARCH_DEFAULT,
-         verbose: false, color: false, number_lines: false)
+
+def rbcontext_main(look_for, files, search_type: SEARCH_DEFAULT,
+                   verbose: false, color: false, number_lines: false)
   num_color = color ? BLUE : nil
   line_color = color ? LIGHT_GREEN : nil
   all_contexts = {}
@@ -270,9 +287,9 @@ if __FILE__ == $0
     paths = ARGV
   end
 
-  main(look_for, paths,
-       search_type: options[:search_type] || SEARCH_DEFAULT,
-       verbose: options[:verbose],
-       color: options[:color],
-       number_lines: options[:number_lines])
+  rbcontext_main(look_for, paths,
+                 search_type: options[:search_type] || SEARCH_DEFAULT,
+                 verbose: options[:verbose],
+                 color: options[:color],
+                 number_lines: options[:number_lines])
 end
