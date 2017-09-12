@@ -46,7 +46,7 @@ end
 class Matcher < NodeVisitor
   attr_accessor :lines, :offset, :look_for, :history, :matches
 
-  def initialize(look_for, lines, offset)
+  def initialize(look_for, lines, offset: 1)
     @lines = lines
     @offset = offset
     @look_for = format_look_for(look_for)
@@ -142,7 +142,7 @@ class SourceCode
     end
     @lines = source.readlines
     @processed_raw = process_raw.join("")
-    @matcher = matcher.new(look_for, lines, offset)
+    @matcher = matcher.new(look_for, lines, :offset => offset)
     @matches = []
   end
 
@@ -218,8 +218,6 @@ def rbcontext_main(look_for, files, search_type: SEARCH_DEFAULT,
                                 :number_lines => number_lines, :num_color => num_color,
                                 :line_color => line_color)
         context = source.find_context
-      rescue SystemExit, Interrupt
-        raise
       rescue => e
         if verbose == 1
           skipped_files[f] = e.inspect
@@ -277,9 +275,7 @@ if __FILE__ == $0
 
   raw_look_for = ARGV.shift
   look_for = raw_look_for
-  if options[:search_type] == SEARCH_LINENO
-    look_for = eval(raw_look_for)
-  end
+  look_for = look_for.split(',') if options[:search_type] == SEARCH_LINENO
 
   if ARGV.length ==0
     paths = [$stdin.fileno]
