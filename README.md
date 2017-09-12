@@ -44,10 +44,9 @@ Find lines in a Python source file and the context they're in.
 
 positional arguments:
   look_for            Object to look for in the file. For certain searchtypes
-                      this can be a comma-separated list or a Pythonlist such
-                      as [6,8,10]
-  paths               Files (or directories if -r option) to look in. If there
-                      is no argument passed here, read from STDIN
+                      this can be a comma-separated list such as "6,8,10"
+  paths               Files to look in. If there is no argument passed here,
+                      read from STDIN
 
 optional arguments:
   -h, --help          show this help message and exit
