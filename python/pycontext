@@ -20,6 +20,62 @@ def insert_term_color(string, start, end, color):
     return string[:start] + color + string[start:end] + END_COLOR + string[end:]
 
 
+def last_block_lineno(node_list):
+    """Given a list of ast.AST nodes, return the last line number or as close as we can get"""
+    node = node_list[-1]
+    lineno = node.lineno
+    for name, field in ast.iter_fields(node):
+        if isinstance(field, list) and len(field) > 0:
+            candidate = last_block_lineno(field)
+            if candidate > lineno:
+                lineno = candidate
+    return lineno
+
+
+class Else():
+    def __init__(self, main_node):
+        self.main_node = main_node
+        self._linenos = None
+
+    def calc_linenos(self):
+        start = last_block_lineno(self.main_node.body) + 1
+        linenos = list(range(start, self.main_node.orelse[0].lineno))
+        return linenos
+
+    def linenos(self):
+        if self._linenos is not None:
+            return self._linenos
+
+        self._linenos = self.calc_linenos()
+        return self._linenos
+
+
+class TryElse(Else):
+    def calc_linenos(self):
+        start = last_block_lineno(self.main_node.handlers) + 1
+        end = self.main_node.orelse[0].lineno
+        linenos =  [i.lineno for i in self.main_node.handlers] + \
+                   list(range(start, end))
+        return linenos
+
+
+class TryFinally(Else):
+    def calc_linenos(self):
+        include_lines = []
+
+        if len(self.main_node.orelse) > 0:
+            include_lines.extend(TryElse.calc_linenos(self))
+            start = last_block_lineno(self.main_node.orelse) + 1
+        elif len(self.main_node.handlers) > 0:
+            include_lines.extend([i.lineno for i in self.main_node.handlers])
+            start = last_block_lineno(self.main_node.handlers[-1].body) + 1
+        else:
+            start = last_block_lineno(self.main_node.body) + 1
+
+        self._linenos = include_lines + list(range(start, self.main_node.finalbody[0].lineno))
+        return self._linenos
+
+
 class Matcher(ast.NodeVisitor):
     def __init__(self, look_for, lines, offset=1):
         self.lines = lines
@@ -27,27 +83,73 @@ class Matcher(ast.NodeVisitor):
         self.look_for = self.format_look_for(look_for)
         self.history = []
         self.matches = []
+        self.current_elses = []
 
     def format_look_for(self, look_for):
         return look_for
 
     def color_line(self, lineno, line, line_color=None):
         return line
+    
+    def make_special_iterator(self, handlers):
+        """Adapted from Lib/ast.py in CPython source code
 
-    def generic_visit(self, node):
+        handlers should be a dict of the form {<field name>: <class to call>}
+        """
+        def iter_fields(node):
+            for field in node._fields:
+                try:
+                    if field in handlers and len(getattr(node, field)) > 0:
+                        self.current_elses.append(handlers[field](node))
+                        yield field, getattr(node, field)
+                        self.current_elses.pop()
+                    else:
+                        yield field, getattr(node, field)
+                except AttributeError:
+                    pass
+ 
+        def iter_child_nodes(node):
+            for name, field in iter_fields(node):
+                if isinstance(field, ast.AST):
+                    yield field
+                elif isinstance(field, list):
+                    for item in field:
+                        if isinstance(item, ast.AST):
+                            yield item
+
+        return iter_child_nodes
+
+    def visit_If(self, node):
+        self.generic_visit(node, iter_node_func=self.make_special_iterator({'orelse': Else}))
+
+    def visit_Try(self, node):
+        self.generic_visit(node, iter_node_func=self.make_special_iterator(
+            {'orelse': TryElse, 'finalbody': TryFinally}))
+
+    def generic_visit(self, node, iter_node_func=ast.iter_child_nodes):
+        history_added = 0
+        if len(self.current_elses) > 0:
+            self.history += self.current_elses[-1].linenos()
+            history_added += len(self.current_elses[-1].linenos())
+
         try:
             self.history.append(node.lineno)
-            history_added = 1
+            history_added += 1
         except:
-            history_added = False
+            pass
 
         match = self.node_matches(node)
         if match:
             self.matches = self.matches + self.history + [match]
-        for i in ast.iter_child_nodes(node):
+            if len(self.current_elses) > 0:
+                for _ in range(len(self.current_elses[-1].linenos())):
+                    self.history.pop()
+                history_added -= len(self.current_elses[-1].linenos())
+
+        for i in iter_node_func(node):
             self.visit(i)
 
-        if history_added and len(self.history) > 0:
+        if history_added > 0 and len(self.history) > 0:
             for _ in range(history_added):
                 self.history.pop()
 
@@ -95,7 +197,7 @@ class RegexMatcher(LineNoMatcher):
         return line
 
 
-class SourceCode(object):
+class SourceCode():
     def __init__(self, source, matcher_class, look_for=None, num_color=None,
                  line_color=None, offset=1, filename='', number_lines=None):
         """
@@ -149,7 +251,7 @@ class SourceCode(object):
             return colored_line
 
 
-def main(look_for, files, search_type=None, ignore=None, verbose=False, color=False,
+def main(look_for, files, search_type=None, ignore=None, verbose=0, color=False,
          number_lines=False, output=sys.stdout, errout=sys.stderr):
     """
     look_for is a string, files is a list of paths
@@ -182,9 +284,12 @@ def main(look_for, files, search_type=None, ignore=None, verbose=False, color=Fa
                 output.write("".join(result))
                 all_contexts[f.name] = context
         except Exception as e:
-            skipped_files[f.name] = e
+            if verbose == 1:
+                skipped_files[f.name] = e
+            elif verbose == 2:
+                skipped_files[f.name] = "{}\n{}".format(e, traceback.format_exc())
 
-    if verbose and skipped_files:
+    if verbose > 0 and skipped_files:
         errout.write("\nSkipped these files due to errors:\n")
         [errout.write("{}: {}\n".format(key, skipped_files[key])) for key in skipped_files]
 
@@ -211,10 +316,9 @@ if __name__ == "__main__":
                         help="Search by line number.  Allows a list as the look_for argument")
     parser.add_argument("-e", "--search-regex", dest="search_type", action="store_const",
                         const=SEARCH_REGEX, help="search by regexp")
-    parser.add_argument("-v", "--verbose", action="store_true",
+    parser.add_argument("-v", "--verbose", action="count", default=0,
                         help="Display information about errors and skipped files")
     args = parser.parse_args()
-
     look_for = args.look_for
     if args.search_type == SEARCH_LINENO:
         try:

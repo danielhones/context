@@ -40,8 +40,13 @@ else:
     if c % a == 0:
         print('yes')
     else:
-        # comment
-        print('no')
+        if False:
+            print("that would be weird")
+        elif None:
+            print("so would this")
+        else:
+            x = 27
+            print('no')
 """
 TRY_EXCEPT_ELSE_EXAMPLE = """
 try:
@@ -55,6 +60,12 @@ except Exception as e:
     print("c == ", str(c))
 else:
     print("Ran successfully")
+finally:
+    print("running cleanup")
+    sock.close()
+"""
+MIXED_TRY_IF_ELSE_EXAMPLE = """
+
 """
 
 
@@ -74,36 +85,26 @@ class SourceCodeTestCase(unittest.TestCase):
 class TestSourceCodeContextSearchLineNo(SourceCodeTestCase):
     matcher_type = LineNoMatcher
 
+    def test_if_without_else(self):
+        test_file = FakeFile("""
+if True:
+    a = 2
+    print(a)
+""")
+        self.expected = ['if True:\n',
+                         '    print(a)\n']
+        self.assert_context_accurate(test_file, 4)
+
     def test_if_else_block_shows_if_line(self):
         self.expected = ["if a is not None:\n",
                          '    print("a was something. b ==", b)\n']
         self.assert_context_accurate(FakeFile(IF_ELSE_EXAMPLE), 4)
 
-    @unittest.expectedFailure
     def test_if_else_block_shows_if_and_else_lines(self):
         self.expected = ["if a is not None:\n",
                          "else:\n",
                          "    b = 42\n"]
         self.assert_context_accurate(FakeFile(IF_ELSE_EXAMPLE), 6)
-
-    def test_try_except_else_block_shows_try_line(self):
-        self.expected = ["try:\n",
-                         '    print("7 ** 4 ==", c)\n']
-        self.assert_context_accurate(FakeFile(TRY_EXCEPT_ELSE_EXAMPLE), 6)
-
-    def test_try_except_else_block_shows_try_and_except_lines(self):
-        self.expected = ['try:\n',
-                         'except Exception as e:\n',
-                         '    c = None\n']
-        self.assert_context_accurate(FakeFile(TRY_EXCEPT_ELSE_EXAMPLE), 8)
-
-    @unittest.expectedFailure
-    def test_try_except_else_block_shows_try_except_and_else_lines(self):
-        self.expected = ['try:\n',
-                         'except Exception as e:\n',
-                         'else:\n',
-                         '    print("Ran successfully")\n']
-        self.assert_context_accurate(FakeFile(TRY_EXCEPT_ELSE_EXAMPLE), 12)
 
     def test_if_elif_else_block_shows_elif_line(self):
         self.expected = ['if a is not None:\n',
@@ -111,7 +112,6 @@ class TestSourceCodeContextSearchLineNo(SourceCodeTestCase):
                          '    print("b was something. b ==", b)\n']
         self.assert_context_accurate(FakeFile(IF_ELIF_ELSE_EXAMPLE), 7)
 
-    @unittest.expectedFailure
     def test_if_elif_else_block_shows_else_line(self):
         self.expected = ['if a is not None:\n',
                          'elif b is not None:\n',
@@ -125,7 +125,6 @@ class TestSourceCodeContextSearchLineNo(SourceCodeTestCase):
                          '        print("EVEN!")\n']
         self.assert_context_accurate(FakeFile(NESTED_IF_ELSE_EXAMPLE), 6)
 
-    @unittest.expectedFailure
     def test_nested_if_else_with_else_branch(self):
         self.expected = ['if b:\n',
                          '    if a % 2 == 0:\n',
@@ -133,13 +132,76 @@ class TestSourceCodeContextSearchLineNo(SourceCodeTestCase):
                          '        print("ODD!")\n']
         self.assert_context_accurate(FakeFile(NESTED_IF_ELSE_EXAMPLE), 8)
 
-    @unittest.expectedFailure
-    def test_nested_if_else_with_both_else_branches(self):
+    def test_nested_if_else_with_all_else_branches(self):
         self.expected = ['if b:\n',
                          'else:\n',
+                         '    if c % a == 0:\n',
                          '    else:\n',
-                         "        print('no')\n"]
-        self.assert_context_accurate(FakeFile(NESTED_IF_ELSE_EXAMPLE), 16)
+                         '        if False:\n',
+                         '        elif None:\n',
+                         '        else:\n',
+                         "            x = 27\n"]
+        self.assert_context_accurate(FakeFile(NESTED_IF_ELSE_EXAMPLE), 20)
+
+    def test_try_except_else_block_shows_try_line(self):
+        self.expected = ["try:\n",
+                         '    print("7 ** 4 ==", c)\n']
+        self.assert_context_accurate(FakeFile(TRY_EXCEPT_ELSE_EXAMPLE), 6)
+
+    def test_try_except_else_block_shows_try_and_except_lines(self):
+        self.expected = ['try:\n',
+                         'except Exception as e:\n',
+                         '    c = None\n']
+        self.assert_context_accurate(FakeFile(TRY_EXCEPT_ELSE_EXAMPLE), 8)
+
+    def test_try_except_else_block_shows_try_except_and_else_lines(self):
+        self.expected = ['try:\n',
+                         'except Exception as e:\n',
+                         'else:\n',
+                         '    print("Ran successfully")\n']
+        self.assert_context_accurate(FakeFile(TRY_EXCEPT_ELSE_EXAMPLE), 12)
+
+    def test_try_except_else_finally(self):
+        self.expected = ['try:\n',
+                         'except Exception as e:\n',
+                         'else:\n',
+                         'finally:\n',
+                         '    sock.close()\n']
+        self.assert_context_accurate(FakeFile(TRY_EXCEPT_ELSE_EXAMPLE), 15)
+
+    def test_try_except_finally_without_else(self):
+        test_file = FakeFile("""
+try:
+    a = 2
+    b = 3
+except KeyboardInterrupt:
+    sys.exit(0)
+except TypeError as e:
+    print("error:", e)
+    print("continuing")
+finally:
+    print("finally")
+""")
+        self.expected = ['try:\n',
+                         'except KeyboardInterrupt:\n',
+                         'except TypeError as e:\n',
+                         'finally:\n',
+                         '    print("finally")\n']
+        self.assert_context_accurate(test_file, 11)
+
+    def test_try_finally_without_except_or_else(self):
+        test_file = FakeFile("""
+try:
+    a = 2
+    b = 3
+finally:
+    a = None
+    print("finally")
+""")
+        self.expected = ['try:\n',
+                         'finally:\n',
+                         '    print("finally")\n']
+        self.assert_context_accurate(test_file, 7)
 
 
 if __name__ == '__main__':
