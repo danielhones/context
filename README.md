@@ -1,6 +1,6 @@
 # Context
 
-See lines of code in context by folding/hiding irrelevant lines.  Sort of like grep that also shows you the branch that leads to a particular line or function call/object reference.  Imagine working inside a 5th or 6th nested if/else block with each block taking up more than a page of screen.  Not a great situation, but it happens sometimes.  It would be nice to have a bird's-eye view of what if/elif clauses lead to the line you're working on, without the clutter of the in-between lines of code and tracing through it manually.  That's what this does.
+See lines of code in context by folding/hiding irrelevant lines.  Sort of like grep that also shows you the branch that leads to a particular line or function call/object reference.  Imagine working inside a 5th or 6th nested if/else block with each block taking up more than a page of screen.  It would be nice to have a bird's-eye view of the if/elif conditions that lead to the line you're working on, without the clutter of the in-between lines of code and tracing through it manually.  That's what this tool does.
 
 Right now there are tools for Python and Ruby, each using native parsers to build the abstract syntax tree.  This might be a questionable decision since it means maintaining the same program in two different languages... So that might eventually change if I find a good library/libraries for parsing each different target language and can write something to provide a shared interface for them across languages.  Until then, each file is only around 200 lines so it's not so bad yet.
 
@@ -85,8 +85,12 @@ Options:
 
 ## Known Bugs
 
-- Due to the hack of replacing `else` by `elif True`, a Python file that uses try/except/else will not parse (because the `else` is subbed with `elif True` which is a SyntaxError).  Hopefully I'll fix this soon.  The reason for this hack in the first place is that else lines have no line number in Python's AST parser.
-- The same bug exists in rbcontext with begin/rescue/else in Ruby files.
+- Due to the hack of replacing `else` by `elsif true`, a Ruby file that uses try/except/else will not parse (because the `else` is subbed with `elsif True` which is a SyntaxError).  Hopefully I'll fix this soon; I recently fixed the same bug for pycontext.  The reason for this hack in the first place is that else lines have no line number in Ruby's AST parser.
+
+
+## Updates
+
+- The else bug that still exists in rbcontext has been fixed in pycontext
 
 
 ## rbcontext quirks
