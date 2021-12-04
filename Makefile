@@ -1,7 +1,7 @@
 .PHONY: build
 
 build:
-	env GOARCH=amd64 GOOS=linux go build -ldflags="-extldflags=-static" -o bin/context context.go
+	env go build -ldflags="-extldflags=-static" -o bin/context 
 
 clean:
 	rm -rf ./bin

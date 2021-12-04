@@ -15,9 +15,10 @@ import (
 	// "github.com/smacker/go-tree-sitter/ruby"
 )
 
-func visitAllNodes(cur *sitter.TreeCursor, f func(n *sitter.Node)) {
+// Visit every node in the tree, in a depth-first left-to-right traversal
+func ORIGvisitAllNodes(cur *sitter.TreeCursor, f func(n *sitter.Node)) {
 	if cur.GoToFirstChild() {
-		visitAllNodes(cur, f)
+		ORIGvisitAllNodes(cur, f)
 	} else {
 		// The current node has no children, so we visit it now:
 		f(cur.CurrentNode())
@@ -25,9 +26,36 @@ func visitAllNodes(cur *sitter.TreeCursor, f func(n *sitter.Node)) {
 		// Then move onto each sibling:
 		for {
 			if cur.GoToNextSibling() {
-				visitAllNodes(cur, f)
+				ORIGvisitAllNodes(cur, f)
 			} else if cur.GoToParent() {
 				f(cur.CurrentNode())
+			} else {
+				// There's no sibling and no parent so we must be at the root
+				return
+			}
+		}
+	}
+}
+
+// Visit every node in the tree, in a depth-first left-to-right traversal
+func visitAllNodes(cur *sitter.TreeCursor, f func(n *sitter.Node, h History), hist History) {
+	// added := 1
+	hist.Push(cur.CurrentNode().StartPoint().Row)
+
+	if cur.GoToFirstChild() {
+		visitAllNodes(cur, f, hist)
+	} else {
+		// The current node has no children, so we visit it now:
+		f(cur.CurrentNode(), hist)
+		hist.Pop()
+
+		// Then move onto each sibling:
+		for {
+			if cur.GoToNextSibling() {
+				visitAllNodes(cur, f, hist)
+			} else if cur.GoToParent() {
+				hist.Pop()
+				f(cur.CurrentNode(), hist)
 			} else {
 				// There's no sibling and no parent so we must be at the root
 				return
@@ -44,15 +72,18 @@ func context(src []byte, tree *sitter.Tree, matcher func(n *sitter.Node) bool) [
 	cur := sitter.NewTreeCursor(tree.RootNode())
 	defer cur.Close()
 
-	matchHandler := func(n *sitter.Node) {
+	visitor := func(n *sitter.Node, h History) {
 		if matcher(n) {
 			lineMap[n.StartPoint().Row] = struct{}{}
+			for _, x := range h.Lines() {
+
+				lineMap[x] = struct{}{}
+			}
 		}
 	}
 
-	visitAllNodes(cur, matchHandler)
+	visitAllNodes(cur, visitor, History{})
 
-	// TODO: Sort the line numbers before returning:
 	lines := make([]int, len(lineMap))
 	i := 0
 	for k := range lineMap {
@@ -69,9 +100,11 @@ func usage() {
 		w,
 		`Usage: context [options] <search> [file1 file2 ...]
 
-Find lines in a source code file and print the context they're in
+Find lines in a source code file and print the lines in the syntax tree 
+leading up to them.  The "search" command line argument is required, and
+so is at least one file path.
 
-Parameters
+Options
 `,
 	)
 	flag.PrintDefaults()
@@ -83,6 +116,7 @@ func main() {
 
 	flag.Usage = usage
 	matchRegex := flag.Bool("e", false, "Search by regex instead of line number")
+	printNums := flag.Bool("n", false, "Include line numbers in output")
 	flag.Parse()
 
 	if len(flag.Args()) < 2 {
@@ -135,6 +169,10 @@ func main() {
 		lines := context(contents, tree, matcher)
 		tree.Close()
 
+		if len(lines) == 0 {
+			continue
+		}
+
 		// Now print the result, starting with filename if there were multiple files:
 		if len(files) > 1 {
 			fmt.Printf("\n%s\n\n", path)
@@ -142,7 +180,16 @@ func main() {
 			fmt.Printf("\n")
 		}
 
+		// We want line numbers to be right justified, with leading space before them,
+		// so get the width of the longest number, and use that to build a format string
+		// like "%4d" that we use when printing the line number:
+		maxNumWidth := len(fmt.Sprintf("%d", lines[len(lines)-1]))
+		fs := fmt.Sprintf("%%%dd:", maxNumWidth)
+
 		for _, x := range lines {
+			if *printNums {
+				fmt.Printf(fs, x)
+			}
 			fmt.Println(string(srcLines[x]))
 		}
 
