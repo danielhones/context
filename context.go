@@ -16,30 +16,7 @@ import (
 )
 
 // Visit every node in the tree, in a depth-first left-to-right traversal
-func ORIGvisitAllNodes(cur *sitter.TreeCursor, f func(n *sitter.Node)) {
-	if cur.GoToFirstChild() {
-		ORIGvisitAllNodes(cur, f)
-	} else {
-		// The current node has no children, so we visit it now:
-		f(cur.CurrentNode())
-
-		// Then move onto each sibling:
-		for {
-			if cur.GoToNextSibling() {
-				ORIGvisitAllNodes(cur, f)
-			} else if cur.GoToParent() {
-				f(cur.CurrentNode())
-			} else {
-				// There's no sibling and no parent so we must be at the root
-				return
-			}
-		}
-	}
-}
-
-// Visit every node in the tree, in a depth-first left-to-right traversal
 func visitAllNodes(cur *sitter.TreeCursor, f func(n *sitter.Node, h History), hist History) {
-	// added := 1
 	hist.Push(cur.CurrentNode().StartPoint().Row)
 
 	if cur.GoToFirstChild() {
@@ -94,6 +71,68 @@ func context(src []byte, tree *sitter.Tree, matcher func(n *sitter.Node) bool) [
 	return lines
 }
 
+func processFile(path string, search Search, opts Options) {
+	parser := sitter.NewParser()
+	parser.SetLanguage(python.GetLanguage())
+
+	contents, err := ioutil.ReadFile(path)
+
+	srcLines := bytes.Split(contents, []byte("\n"))
+
+	// Get list of lines in the source file that have what we're
+	// looking for - either string match or specific line numbers:
+	matchingLines := make(map[int]struct{})
+	if search.IsRegexMatch() {
+		for i, s := range srcLines {
+			// TODO: Use a regex match here:
+			if strings.Contains(string(s), search.Val) {
+				matchingLines[i] = struct{}{}
+			}
+		}
+	} else {
+		for _, x := range search.ValInts {
+			matchingLines[x] = struct{}{}
+		}
+	}
+
+	// The matcher just checks whether the current Node starts on
+	// one of the matching lines
+	matcher := func(n *sitter.Node) bool {
+		_, found := matchingLines[int(n.StartPoint().Row)]
+		return found
+	}
+
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error reading %v: %v\n", path, err)
+		return
+	}
+
+	tree := parser.Parse(nil, contents)
+	lines := context(contents, tree, matcher)
+	tree.Close()
+
+	if len(lines) == 0 {
+		return
+	}
+
+	fmt.Printf("\n%s\n\n", path)
+
+	// We want line numbers to be right justified, with leading space before them,
+	// so get the width of the longest number, and use that to build a format string
+	// like "%4d" that we use when printing the line number:
+	maxNumWidth := len(fmt.Sprintf("%d", lines[len(lines)-1]))
+	fs := fmt.Sprintf("%%%dd:", maxNumWidth)
+
+	for _, x := range lines {
+		if opts.PrintNums {
+			fmt.Printf(fs, x)
+		}
+		fmt.Println(string(srcLines[x]))
+	}
+
+	fmt.Println()
+}
+
 func usage() {
 	w := flag.CommandLine.Output()
 	fmt.Fprintf(
@@ -102,7 +141,8 @@ func usage() {
 
 Find lines in a source code file and print the lines in the syntax tree 
 leading up to them.  The "search" command line argument is required, and
-so is at least one file path.
+so is at least one file argument.  By default, the search value is read
+as an integer and searches for a line number
 
 Options
 `,
@@ -111,12 +151,16 @@ Options
 }
 
 func main() {
-	parser := sitter.NewParser()
-	parser.SetLanguage(python.GetLanguage())
+	opts := Options{}
 
 	flag.Usage = usage
 	matchRegex := flag.Bool("e", false, "Search by regex instead of line number")
-	printNums := flag.Bool("n", false, "Include line numbers in output")
+	flag.BoolVar(&opts.PrintNums, "n", false, "Include line numbers in output")
+	flag.StringVar(&opts.Language,
+		"l",
+		"",
+		"Specify the language to parse.  Omitting this will autodetect language from file extension.",
+	)
 	flag.Parse()
 
 	if len(flag.Args()) < 2 {
@@ -124,75 +168,26 @@ func main() {
 		os.Exit(2)
 	}
 
-	lookFor := flag.Args()[0]
+	searchArg := flag.Args()[0]
 	files := flag.Args()[1:]
 
-	lookForInt, err := strconv.Atoi(lookFor)
+	search := NewSearch()
 
-	if !*matchRegex && err != nil {
-		fmt.Fprintf(os.Stderr, "Could not parse %s as int\n", lookFor)
-		os.Exit(1)
+	if *matchRegex {
+		search.Val = searchArg
+		search.SetRegexMatch()
+	} else {
+		// TODO: Accept and parse comma-separated list of integers, and maybe ranges
+		//	 like 23-30:
+		searchInt, err := strconv.Atoi(searchArg)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Could not parse %s as int\n", searchArg)
+			os.Exit(1)
+		}
+		search.ValInts = []int{searchInt}
 	}
 
 	for _, path := range files {
-		contents, err := ioutil.ReadFile(path)
-
-		srcLines := bytes.Split(contents, []byte("\n"))
-
-		// Get list of lines in the source file that have what we're
-		// looking for - either string match or specific line numbers:
-		matchingLines := make(map[int]struct{})
-		if *matchRegex {
-			for i, s := range srcLines {
-				// TODO: Use a regex match here:
-				if strings.Contains(string(s), lookFor) {
-					matchingLines[i] = struct{}{}
-				}
-			}
-		} else {
-			matchingLines[lookForInt] = struct{}{}
-		}
-
-		// The matcher just checks whether the current Node starts on
-		// one of the matching lines
-		matcher := func(n *sitter.Node) bool {
-			_, found := matchingLines[int(n.StartPoint().Row)]
-			return found
-		}
-
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading %v: %v\n", path, err)
-			continue
-		}
-
-		tree := parser.Parse(nil, contents)
-		lines := context(contents, tree, matcher)
-		tree.Close()
-
-		if len(lines) == 0 {
-			continue
-		}
-
-		// Now print the result, starting with filename if there were multiple files:
-		if len(files) > 1 {
-			fmt.Printf("\n%s\n\n", path)
-		} else {
-			fmt.Printf("\n")
-		}
-
-		// We want line numbers to be right justified, with leading space before them,
-		// so get the width of the longest number, and use that to build a format string
-		// like "%4d" that we use when printing the line number:
-		maxNumWidth := len(fmt.Sprintf("%d", lines[len(lines)-1]))
-		fs := fmt.Sprintf("%%%dd:", maxNumWidth)
-
-		for _, x := range lines {
-			if *printNums {
-				fmt.Printf(fs, x)
-			}
-			fmt.Println(string(srcLines[x]))
-		}
-
-		fmt.Println()
+		processFile(path, search, opts)
 	}
 }
