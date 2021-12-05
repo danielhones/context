@@ -233,6 +233,7 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Could not parse %s as int\n", searchArg)
 			os.Exit(1)
 		}
+		searchInt = searchInt - 1 // convert to the zero-based index we need
 		search.ValInts = []int{searchInt}
 	}
 

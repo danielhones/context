@@ -28,7 +28,7 @@ var LANGUAGES = []LanguageInfo{
 		Name:        "Go",
 		Exts:        []string{"go"},
 		Lang:        golang.GetLanguage(),
-		BranchTypes: []string{}, // TODO: fill this in after testing
+		BranchTypes: []string{"expression_case", "default_case"},
 	},
 	LanguageInfo{
 		Name:        "Javascript",
