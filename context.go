@@ -11,8 +11,6 @@ import (
 	"strings"
 
 	sitter "github.com/smacker/go-tree-sitter"
-	"github.com/smacker/go-tree-sitter/python"
-	// "github.com/smacker/go-tree-sitter/ruby"
 )
 
 // Visit every node in the tree, in a depth-first left-to-right traversal
@@ -71,11 +69,11 @@ func context(src []byte, tree *sitter.Tree, matcher func(n *sitter.Node) bool) [
 	return lines
 }
 
-func processFile(path string, search Search, opts Options) {
-	parser := sitter.NewParser()
-	parser.SetLanguage(python.GetLanguage())
-
+func processFile(path string, search Search, opts Options) error {
 	contents, err := ioutil.ReadFile(path)
+	if err != nil {
+		return err
+	}
 
 	srcLines := bytes.Split(contents, []byte("\n"))
 
@@ -96,26 +94,33 @@ func processFile(path string, search Search, opts Options) {
 	}
 
 	// The matcher just checks whether the current Node starts on
-	// one of the matching lines
+	// one of the matching lines we found:
 	matcher := func(n *sitter.Node) bool {
 		_, found := matchingLines[int(n.StartPoint().Row)]
 		return found
 	}
 
+	var lang *sitter.Language
+	if opts.AutoDetect() {
+		lang, err = LangFromFilename(path)
+	} else {
+		lang, err = LangFromString(opts.Language)
+	}
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error reading %v: %v\n", path, err)
-		return
+		return err
 	}
 
+	parser := sitter.NewParser()
+	parser.SetLanguage(lang)
 	tree := parser.Parse(nil, contents)
 	lines := context(contents, tree, matcher)
 	tree.Close()
 
 	if len(lines) == 0 {
-		return
+		return nil
 	}
 
-	fmt.Printf("\n%s\n\n", path)
+	fmt.Fprintf(os.Stdout, "\n%s\n\n", path)
 
 	// We want line numbers to be right justified, with leading space before them,
 	// so get the width of the longest number, and use that to build a format string
@@ -125,12 +130,13 @@ func processFile(path string, search Search, opts Options) {
 
 	for _, x := range lines {
 		if opts.PrintNums {
-			fmt.Printf(fs, x)
+			fmt.Fprintf(opts.Out, fs, x)
 		}
-		fmt.Println(string(srcLines[x]))
+		fmt.Fprintln(opts.Out, string(srcLines[x]))
 	}
 
-	fmt.Println()
+	fmt.Fprintln(opts.Out)
+	return nil
 }
 
 func usage() {
@@ -144,28 +150,41 @@ leading up to them.  The "search" command line argument is required, and
 so is at least one file argument.  By default, the search value is read
 as an integer and searches for a line number
 
-Options
+Options:
 `,
 	)
 	flag.PrintDefaults()
+
+	fmt.Fprintf(w, "\nLanguages:\n")
+	for k, v := range LANGUAGE_MAP {
+		fmt.Fprintf(w, "  %v\t%v\n", k, v.Name)
+	}
 }
 
 func main() {
-	opts := Options{}
+	opts := NewOptions()
 
 	flag.Usage = usage
-	matchRegex := flag.Bool("e", false, "Search by regex instead of line number")
+	// TODO: This will eventually be a regex match, but currently is just string.Contains()
+	//	 When regex is implemented, update this help message:
+	matchRegex := flag.Bool("e", false, "Search by string instead of line number")
 	flag.BoolVar(&opts.PrintNums, "n", false, "Include line numbers in output")
 	flag.StringVar(&opts.Language,
 		"l",
 		"",
-		"Specify the language to parse.  Omitting this will autodetect language from file extension.",
+		"Language to parse, in shorthand/file extension form.  See below for list.  Omitting this will detect language from filename.",
 	)
 	flag.Parse()
 
 	if len(flag.Args()) < 2 {
 		flag.Usage()
 		os.Exit(2)
+	}
+
+	// Make sure language, if specified, is valid:
+	if !opts.AutoDetect() && !LangIsSupported(opts.Language) {
+		fmt.Fprintf(os.Stderr, "Language is not supported: %v\n", opts.Language)
+		os.Exit(1)
 	}
 
 	searchArg := flag.Args()[0]
@@ -188,6 +207,9 @@ func main() {
 	}
 
 	for _, path := range files {
-		processFile(path, search, opts)
+		err := processFile(path, search, opts)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error processing %v: %v\n", path, err)
+		}
 	}
 }
