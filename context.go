@@ -15,7 +15,8 @@ import (
 
 // Visit every node in the tree, in a depth-first left-to-right traversal
 func visitAllNodes(cur *sitter.TreeCursor, f func(n *sitter.Node, h History), hist History) {
-	hist.Push(cur.CurrentNode().StartPoint().Row)
+	// hist.Push(cur.CurrentNode().StartPoint().Row)
+	hist.Push(cur.CurrentNode())
 
 	if cur.GoToFirstChild() {
 		visitAllNodes(cur, f, hist)
@@ -39,6 +40,13 @@ func visitAllNodes(cur *sitter.TreeCursor, f func(n *sitter.Node, h History), hi
 	}
 }
 
+// Return true if the node is an "alternate" type, eg an "else" or "else if" block.
+// TODO: This probably needs to be language-aware, unless I can find how to access
+// the generic node names that tree-sitter uses.
+func isMultiBranchNode(n *sitter.Node) bool {
+	return n.Type() == "else_clause" || n.Type() == "elif_clause"
+}
+
 // Find matching lines and the branches in the tree that lead to them.
 // Returns list of line numbers.
 func context(src []byte, tree *sitter.Tree, matcher func(n *sitter.Node) bool) []int {
@@ -48,11 +56,28 @@ func context(src []byte, tree *sitter.Tree, matcher func(n *sitter.Node) bool) [
 	defer cur.Close()
 
 	visitor := func(n *sitter.Node, h History) {
-		if matcher(n) {
-			lineMap[n.StartPoint().Row] = struct{}{}
-			for _, x := range h.Lines() {
+		if !matcher(n) {
+			return
+		}
 
-				lineMap[x] = struct{}{}
+		// If the node matched, then we add it and the current history to
+		// lineMap.  For any "multi-branch" nodes, eg else blocks or elif blocks,
+		// we add their previous siblings as well.  This way we can see the
+		// full set of conditons that lead to a given line executing
+		lineMap[n.StartPoint().Row] = struct{}{}
+		for _, x := range h.Nodes() {
+			lineMap[x.StartPoint().Row] = struct{}{}
+			if isMultiBranchNode(x) {
+				// Add line numbers for all previous siblings of this node
+				prev := x.PrevSibling()
+				for {
+					if prev == nil {
+						break
+					}
+					// TODO: limit these to just other multi-branch nodes?
+					lineMap[prev.StartPoint().Row] = struct{}{}
+					prev = prev.PrevSibling()
+				}
 			}
 		}
 	}
