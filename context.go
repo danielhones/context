@@ -148,7 +148,7 @@ func processFile(path string, search Search, opts Options) error {
 		return nil
 	}
 
-	fmt.Fprintf(os.Stdout, "\n%s\n\n", path)
+	fmt.Fprintf(opts.Out, "\n%s\n\n", path)
 
 	// We want line numbers to be right justified, with leading space before them,
 	// so get the width of the longest number, and use that to build a format string

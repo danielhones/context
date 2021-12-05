@@ -4,3 +4,4 @@ __pycache__
 context
 TODO.org
 bin
+coverage.out

@@ -80,7 +80,7 @@ func LangFromString(x string) (LanguageInfo, error) {
 	initLangMap()
 	info, found := LANGUAGE_MAP[x]
 	if !found {
-		return LanguageInfo{}, errors.New(fmt.Sprintf("Unknown language for %v", x))
+		return LanguageInfo{}, errors.New(fmt.Sprintf("Unknown language for %q", x))
 	}
 	return info, nil
 }
