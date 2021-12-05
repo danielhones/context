@@ -40,21 +40,20 @@ func visitAllNodes(cur *sitter.TreeCursor, f func(n *sitter.Node, h History), hi
 	}
 }
 
-// Return true if the node is an "alternate" type, eg an "else" or "else if" block.
-// TODO: This probably needs to be language-aware, unless I can find how to access
-// the generic node names that tree-sitter uses.
-func isMultiBranchNode(n *sitter.Node) bool {
-	return n.Type() == "else_clause" || n.Type() == "elif_clause"
-}
-
 // Find matching lines and the branches in the tree that lead to them.
 // Returns list of line numbers.
-func context(src []byte, tree *sitter.Tree, matcher func(n *sitter.Node) bool) []int {
-	lineMap := make(map[uint32]struct{})
+func context(src []byte, tree *sitter.Tree, matcher func(n *sitter.Node) bool, lang LanguageInfo) []int {
+	lineMap := make(map[uint32]struct{}) // Use a map like a set to track the line numbers we accumulate
 
 	cur := sitter.NewTreeCursor(tree.RootNode())
 	defer cur.Close()
 
+	// The visitor function does most of the work here.  It's called once on every node
+	// in the tree.  It calls the matcher function on the node, and if it returns true
+	// then it adds the current node line number and all the line numbers in the history
+	// to the lineMap.  Then, for each node in the history, it looks back for any other
+	// odes it needs to store as well.  This is how we accumulate all the if/elifs or
+	// switch/cases leading up to a final matching line.
 	visitor := func(n *sitter.Node, h History) {
 		if !matcher(n) {
 			return
@@ -67,15 +66,18 @@ func context(src []byte, tree *sitter.Tree, matcher func(n *sitter.Node) bool) [
 		lineMap[n.StartPoint().Row] = struct{}{}
 		for _, x := range h.Nodes() {
 			lineMap[x.StartPoint().Row] = struct{}{}
-			if isMultiBranchNode(x) {
+			// fmt.Println("History node:", x.StartPoint().Row, x.Type())
+			if IsMultiBranchNode(x, lang) {
 				// Add line numbers for all previous siblings of this node
 				prev := x.PrevSibling()
 				for {
 					if prev == nil {
 						break
 					}
-					// TODO: limit these to just other multi-branch nodes?
-					lineMap[prev.StartPoint().Row] = struct{}{}
+					// fmt.Println("PrevSib node:", prev.StartPoint().Row, prev.Type())
+					if IsMultiBranchNode(prev, lang) {
+						lineMap[prev.StartPoint().Row] = struct{}{}
+					}
 					prev = prev.PrevSibling()
 				}
 			}
@@ -84,6 +86,7 @@ func context(src []byte, tree *sitter.Tree, matcher func(n *sitter.Node) bool) [
 
 	visitAllNodes(cur, visitor, History{})
 
+	// Turn our "set" of line numbers into a list, sort it, then return it:
 	lines := make([]int, len(lineMap))
 	i := 0
 	for k := range lineMap {
@@ -118,27 +121,27 @@ func processFile(path string, search Search, opts Options) error {
 		}
 	}
 
-	// The matcher just checks whether the current Node starts on
-	// one of the matching lines we found:
+	// Then the matcher just needs to check whether the current Node starts
+	// on one of the matching lines we found:
 	matcher := func(n *sitter.Node) bool {
 		_, found := matchingLines[int(n.StartPoint().Row)]
 		return found
 	}
 
-	var lang *sitter.Language
+	var langInfo LanguageInfo
 	if opts.AutoDetect() {
-		lang, err = LangFromFilename(path)
+		langInfo, err = LangFromFilename(path)
 	} else {
-		lang, err = LangFromString(opts.Language)
+		langInfo, err = LangFromString(opts.Language)
 	}
 	if err != nil {
 		return err
 	}
 
 	parser := sitter.NewParser()
-	parser.SetLanguage(lang)
+	parser.SetLanguage(langInfo.Lang)
 	tree := parser.Parse(nil, contents)
-	lines := context(contents, tree, matcher)
+	lines := context(contents, tree, matcher, langInfo)
 	tree.Close()
 
 	if len(lines) == 0 {
@@ -155,7 +158,7 @@ func processFile(path string, search Search, opts Options) error {
 
 	for _, x := range lines {
 		if opts.PrintNums {
-			fmt.Fprintf(opts.Out, fs, x)
+			fmt.Fprintf(opts.Out, fs, x+1)
 		}
 		fmt.Fprintln(opts.Out, string(srcLines[x]))
 	}
@@ -181,8 +184,10 @@ Options:
 	flag.PrintDefaults()
 
 	fmt.Fprintf(w, "\nLanguages:\n")
-	for k, v := range LANGUAGE_MAP {
-		fmt.Fprintf(w, "  %v\t%v\n", k, v.Name)
+	for _, v := range LANGUAGES {
+		for _, ext := range v.Exts {
+			fmt.Fprintf(w, "  %v\t%v\n", ext, v.Name)
+		}
 	}
 }
 
