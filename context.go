@@ -15,7 +15,6 @@ import (
 
 // Visit every node in the tree, in a depth-first left-to-right traversal
 func visitAllNodes(cur *sitter.TreeCursor, f func(n *sitter.Node, h History), hist History) {
-	// hist.Push(cur.CurrentNode().StartPoint().Row)
 	hist.Push(cur.CurrentNode())
 
 	if cur.GoToFirstChild() {

@@ -135,7 +135,7 @@ func TestUnsupportedLanguage(t *testing.T) {
 	search.ValInts = []int{53}
 
 	err := processFile("sample_files/sample.go", search, opts)
-	if err.Error() != "Unknown language for \'fake\'" {
+	if err.Error() != "Unknown language for \"fake\"" {
 		t.Fatalf("Expected error for nonexistent file, got %q", err.Error())
 	}
 }
