@@ -13,6 +13,10 @@ import (
 	sitter "github.com/smacker/go-tree-sitter"
 )
 
+const BLUE string = "\033[34m"
+const GREEN string = "\033[32m"
+const END_COLOR string = "\033[0m"
+
 // Visit every node in the tree, in a depth-first left-to-right traversal
 func visitAllNodes(cur *sitter.TreeCursor, f func(n *sitter.Node, h History), hist History) {
 	hist.Push(cur.CurrentNode())
@@ -149,17 +153,40 @@ func processFile(path string, search Search, opts Options) error {
 
 	fmt.Fprintf(opts.Out, "\n%s\n\n", path)
 
-	// We want line numbers to be right justified, with leading space before them,
-	// so get the width of the longest number, and use that to build a format string
-	// like "%4d" that we use when printing the line number:
+	// We want line numbers to be right justified, with leading space before them.
+	// So we get the width of the longest number first, and use that to build a
+	// format string like "%4d" that we use when printing the line number:
 	maxNumWidth := len(fmt.Sprintf("%d", lines[len(lines)-1]))
 	fs := fmt.Sprintf("%%%dd:", maxNumWidth)
 
 	for _, x := range lines {
-		if opts.PrintNums {
-			fmt.Fprintf(opts.Out, fs, x+1)
+		if !opts.Colorize {
+			if opts.PrintNums {
+				fmt.Fprintf(opts.Out, fs, x+1)
+			}
+			fmt.Fprintln(opts.Out, string(srcLines[x]))
+			continue
 		}
-		fmt.Fprintln(opts.Out, string(srcLines[x]))
+
+		if opts.PrintNums {
+			fmt.Fprintf(opts.Out, BLUE+fs+END_COLOR, x+1)
+		}
+
+		_, wasMatch := matchingLines[x]
+		if wasMatch {
+			var s string
+			if search.IsRegexMatch() {
+				// TODO: This will need updating once we're using actual regex matching:
+				// Colorize only the part of the line that matches the search:
+				s = strings.Replace(string(srcLines[x]), search.Val, GREEN+search.Val+END_COLOR, -1)
+			} else {
+				// Colorize the entire matching line:
+				s = GREEN + string(srcLines[x]) + END_COLOR
+			}
+			fmt.Fprintln(opts.Out, s)
+		} else {
+			fmt.Fprintln(opts.Out, string(srcLines[x]))
+		}
 	}
 
 	fmt.Fprintln(opts.Out)
@@ -198,6 +225,7 @@ func main() {
 	//	 When regex is implemented, update this help message:
 	matchRegex := flag.Bool("e", false, "Search by string instead of line number")
 	flag.BoolVar(&opts.PrintNums, "n", false, "Include line numbers in output")
+	flag.BoolVar(&opts.Colorize, "c", false, "Colorize line numbers and matches in output")
 	flag.StringVar(&opts.Language,
 		"l",
 		"",
