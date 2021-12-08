@@ -19,10 +19,6 @@ func (s Search) IsRegexMatch() bool {
 	return s.MatchType == MATCH_TYPE_REGEX
 }
 
-func (s Search) IsLineMatch() bool {
-	return s.MatchType == MATCH_TYPE_LINE
-}
-
 func (s *Search) SetRegexMatch() {
 	(*s).MatchType = MATCH_TYPE_REGEX
 }

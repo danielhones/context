@@ -2,7 +2,6 @@ package main
 
 import (
 	"io"
-	"os"
 )
 
 // This struct stores information about options for processing files.  It's primarily
@@ -17,8 +16,4 @@ type Options struct {
 
 func (o Options) AutoDetect() bool {
 	return o.Language == ""
-}
-
-func NewOptions() Options {
-	return Options{Out: os.Stdout, Err: os.Stderr}
 }

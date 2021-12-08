@@ -2,154 +2,121 @@ package main
 
 import (
 	"bytes"
+	"fmt"
+	"strings"
 	"testing"
 )
 
-func assertOutput(t *testing.T, expected string, result string, msg string) {
+func stringDiff(a string, b string) {
+
+}
+
+func assertStringEquals(t *testing.T, expected string, result string, msg string) {
 	if result != expected {
-		t.Fatalf("%s\nActual:\n<<<%v>>>\n\nExpected:\n<<<%v>>>'", msg, result, expected)
+		t.Fatalf("%s\nActual:\n<<<%v>>>\n\nExpected:\n<<<%v>>>", msg, result, expected)
 	}
 }
 
-func TestProcessFileGoLineNumber(t *testing.T) {
-	out := bytes.Buffer{}
-	opts := Options{
-		PrintNums: true,
-		Out:       &out,
+func assertInString(t *testing.T, expected string, result string, msg string) {
+	if !strings.Contains(result, expected) {
+		t.Fatalf("%s\nActual:\n<<<%v>>>\n\nExpected:\n<<<%v>>>", msg, result, expected)
 	}
-
-	// Test case 1, nothing special:
-	search := NewSearch()
-	search.ValInts = []int{24}
-	expected := `
-sample_files/sample.go
-
- 1:package main
-19:func (fb FizzBuzzMap) String(i int) string {
-22:	for _, x := range fb.Map {
-23:		if i%x.Divisor == 0 {
-25:			result += x.String
-
-`
-	processFile("sample_files/sample.go", search, opts)
-	assertOutput(t, expected, out.String(), "")
-
-	// Test case 2, multiple if/elseif clauses:
-	search.ValInts = []int{53}
-	expected = `
-sample_files/sample.go
-
- 1:package main
-42:func classicFizzBuzz(start int, end int) {
-43:	for i := start; i <= end; i++ {
-44:		if i%15 == 0 {
-47:		} else if i%3 == 0 {
-50:		} else if i%5 == 0 {
-53:		} else {
-54:			fmt.Println(i)
-
-`
-	out.Reset()
-	processFile("sample_files/sample.go", search, opts)
-	assertOutput(t, expected, out.String(), "Failed if/elseif line number case")
-
-	// Test case 3, multiple switch/case clauses:
-	search.ValInts = []int{71}
-	expected = `
-sample_files/sample.go
-
- 1:package main
-59:func hardcodedFizzBuzz() {
-60:	for i := 1; i <= 15; i++ {
-61:		switch i {
-62:		case 15:
-65:		case 3, 6, 9, 12:
-68:		case 5, 10:
-71:		default:
-72:			fmt.Println(i)
-
-`
-	out.Reset()
-	processFile("sample_files/sample.go", search, opts)
-	assertOutput(t, expected, out.String(), "")
 }
 
-func TestProcessFileGoStringMatch(t *testing.T) {
-	out := bytes.Buffer{}
-	opts := Options{
-		PrintNums: true,
-		Out:       &out,
+func assertEqual(t *testing.T, expected interface{}, actual interface{}, msg string) {
+	if expected != actual {
+		t.Fatalf("%s\nActual: %v\nExpected: %v", msg, actual, expected)
 	}
+}
 
-	search := NewSearch()
-	search.SetRegexMatch()
-	search.Val = "\"Buzz\""
-	expected := `
-sample_files/sample.go
+func TestRunUsage(t *testing.T) {
+	out := bytes.Buffer{}
+	errOut := bytes.Buffer{}
+	// This represents an invalid use, with no arguments passed.
+	// Make sure it prints our custom usage message:
+	exitCode := run(&out, &errOut, []string{})
+	assertEqual(t, exitCode, 2, "")
+	expected := `Usage: context [options] <search> [file1 file2 ...]
 
- 1:package main
-42:func classicFizzBuzz(start int, end int) {
-43:	for i := start; i <= end; i++ {
-44:		if i%15 == 0 {
-47:		} else if i%3 == 0 {
-50:		} else if i%5 == 0 {
-51:			s := "Buzz"
-59:func hardcodedFizzBuzz() {
-60:	for i := 1; i <= 15; i++ {
-61:		switch i {
-62:		case 15:
-65:		case 3, 6, 9, 12:
-68:		case 5, 10:
-69:			s := "Buzz"
-77:func main() {
-85:	fb := FizzBuzzMap{
-86:		Map: []DivisorString{
-88:			DivisorString{5, "Buzz"},
+Find lines in a source code file and print the lines in the syntax tree 
+leading up to them.  The "search" command line argument is required, and
+so is at least one file argument.  By default, the search value is read
+as an integer and searches for a line number
 
+Options:
 `
-	processFile("sample_files/sample.go", search, opts)
-	assertOutput(t, expected, out.String(), "")
+	assertInString(t, expected, errOut.String(), "")
+
+	// Check that intentionally using -h flag prints usage and exits 0:
+	out.Reset()
+	errOut.Reset()
+	exitCode = run(&out, &errOut, []string{"-h"})
+	assertEqual(t, exitCode, 0, "")
+	assertInString(t, expected, errOut.String(), "")
 }
 
 func TestNoMatchingLines(t *testing.T) {
 	out := bytes.Buffer{}
-	opts := Options{
-		PrintNums: true,
-		Out:       &out,
-	}
-	search := NewSearch()
-	search.ValInts = []int{999999}
-
-	processFile("sample_files/sample.go", search, opts)
-	assertOutput(t, "", out.String(), "")
+	errOut := bytes.Buffer{}
+	exitCode := run(&out, &errOut, []string{"-n", "999999", "sample_files/sample.go"})
+	assertEqual(t, exitCode, 0, "")
+	assertStringEquals(t, "", out.String(), "")
 }
 
 func TestUnsupportedLanguage(t *testing.T) {
 	out := bytes.Buffer{}
-	opts := Options{
-		PrintNums: true,
-		Out:       &out,
-		Language:  "fake",
-	}
-	search := NewSearch()
-	search.ValInts = []int{53}
-
-	err := processFile("sample_files/sample.go", search, opts)
-	if err.Error() != "Unknown language for \"fake\"" {
-		t.Fatalf("Expected error for nonexistent file, got %q", err.Error())
-	}
+	errOut := bytes.Buffer{}
+	exitCode := run(&out, &errOut, []string{"-n", "-l", "fake", "foo", "bar"})
+	assertEqual(t, exitCode, 1, "")
+	assertStringEquals(t, "Language is not supported: fake\n", errOut.String(), "")
 }
 
 func TestNonexistentFile(t *testing.T) {
 	out := bytes.Buffer{}
-	opts := Options{
-		PrintNums: true,
-		Out:       &out,
-	}
-	search := NewSearch()
+	errOut := bytes.Buffer{}
 
-	err := processFile("not/a/real/file.py", search, opts)
-	if err == nil {
-		t.Fatalf("Expected an error for nonexistent file, got nil")
-	}
+	exitCode := run(&out, &errOut, []string{"-n", "12", "/not/a/real/file.py"})
+	// Exit is still zero because a failure of one file in a list of many shouldn't
+	// cause the entire thing to fail:
+	assertEqual(t, exitCode, 0, "")
+	assertInString(t, "Error processing /not/a/real/file.py", errOut.String(), "")
+}
+
+func TestUnparsableInt(t *testing.T) {
+	out := bytes.Buffer{}
+	errOut := bytes.Buffer{}
+
+	exitCode := run(&out, &errOut, []string{"-n", "noninteger", "sample_files/sample.go"})
+	assertEqual(t, exitCode, 1, "")
+	assertStringEquals(t, "Could not parse noninteger as int\n", errOut.String(), "")
+}
+
+func TestColorization(t *testing.T) {
+	out := bytes.Buffer{}
+	errOut := bytes.Buffer{}
+
+	run(&out, &errOut, []string{"-n", "-c", "19", "sample_files/sample.go"})
+	expected := fmt.Sprintf(`
+sample_files/sample.go
+
+%s 1:%spackage main
+%s19:%s%sfunc (fb FizzBuzzMap) String(i int) string {%s
+
+`, BLUE, END_COLOR, BLUE, END_COLOR, GREEN, END_COLOR)
+	assertStringEquals(t, expected, out.String(), "")
+
+	// Test with string match coloring:
+	out.Reset()
+	errOut.Reset()
+
+	run(&out, &errOut, []string{"-n", "-c", "-e", "(fb FizzBuzzMap)", "sample_files/sample.go"})
+	expected = fmt.Sprintf(`
+sample_files/sample.go
+
+%s 1:%spackage main
+%s19:%sfunc %s(fb FizzBuzzMap)%s String(i int) string {
+
+`, BLUE, END_COLOR, BLUE, END_COLOR, GREEN, END_COLOR)
+	assertStringEquals(t, expected, out.String(), "")
+
 }

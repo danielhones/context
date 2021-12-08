@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"sort"
@@ -13,6 +14,7 @@ import (
 	sitter "github.com/smacker/go-tree-sitter"
 )
 
+// Some ANSI color codes for terminal output:
 const BLUE string = "\033[34m"
 const GREEN string = "\033[32m"
 const END_COLOR string = "\033[0m"
@@ -193,11 +195,13 @@ func processFile(path string, search Search, opts Options) error {
 	return nil
 }
 
-func usage() {
-	w := flag.CommandLine.Output()
-	fmt.Fprintf(
-		w,
-		`Usage: context [options] <search> [file1 file2 ...]
+func usage(fs *flag.FlagSet) func() {
+	// Return a function so we can write to specified output and print the right defaults:
+	return func() {
+		w := fs.Output()
+		fmt.Fprintf(
+			w,
+			`Usage: context [options] <search> [file1 file2 ...]
 
 Find lines in a source code file and print the lines in the syntax tree 
 leading up to them.  The "search" command line argument is required, and
@@ -206,46 +210,55 @@ as an integer and searches for a line number
 
 Options:
 `,
-	)
-	flag.PrintDefaults()
+		)
+		fs.PrintDefaults()
 
-	fmt.Fprintf(w, "\nLanguages:\n")
-	for _, v := range LANGUAGES {
-		for _, ext := range v.Exts {
-			fmt.Fprintf(w, "  %v\t%v\n", ext, v.Name)
+		fmt.Fprintf(w, "\nLanguages:\n")
+		for _, v := range LANGUAGES {
+			for _, ext := range v.Exts {
+				fmt.Fprintf(w, "  %v\t%v\n", ext, v.Name)
+			}
 		}
 	}
 }
 
-func main() {
-	opts := NewOptions()
+// This is effectively the main() function but with stdOut, StdErr, and command-line
+// args passed in as arguments to make testing easier. The return value is the integer
+// that main should exit with
+func run(stdOut io.Writer, stdErr io.Writer, args []string) int {
+	opts := Options{Out: stdOut, Err: stdErr}
 
-	flag.Usage = usage
+	fs := flag.NewFlagSet("", flag.ContinueOnError)
+	fs.SetOutput(stdErr)
+	fs.Usage = usage(fs)
 	// TODO: This will eventually be a regex match, but currently is just string.Contains()
 	//	 When regex is implemented, update this help message:
-	matchRegex := flag.Bool("e", false, "Search by string instead of line number")
-	flag.BoolVar(&opts.PrintNums, "n", false, "Include line numbers in output")
-	flag.BoolVar(&opts.Colorize, "c", false, "Colorize line numbers and matches in output")
-	flag.StringVar(&opts.Language,
+	matchRegex := fs.Bool("e", false, "Search by string instead of line number")
+	fs.BoolVar(&opts.PrintNums, "n", false, "Include line numbers in output")
+	fs.BoolVar(&opts.Colorize, "c", false, "Colorize line numbers and matches in output")
+	fs.StringVar(&opts.Language,
 		"l",
 		"",
 		"Language to parse, in shorthand/file extension form.  See below for list.  Omitting this will detect language from filename.",
 	)
-	flag.Parse()
 
-	if len(flag.Args()) < 2 {
-		flag.Usage()
-		os.Exit(2)
+	err := fs.Parse(args)
+	if err != nil || len(fs.Args()) < 2 {
+		if err == flag.ErrHelp {
+			return 0 // Help message was requested with the -h flag
+		}
+		fs.Usage()
+		return 2
 	}
 
 	// Make sure language, if specified, is valid:
 	if !opts.AutoDetect() && !LangIsSupported(opts.Language) {
-		fmt.Fprintf(os.Stderr, "Language is not supported: %v\n", opts.Language)
-		os.Exit(1)
+		fmt.Fprintf(stdErr, "Language is not supported: %v\n", opts.Language)
+		return 1
 	}
 
-	searchArg := flag.Args()[0]
-	files := flag.Args()[1:]
+	searchArg := fs.Args()[0]
+	files := fs.Args()[1:]
 
 	search := NewSearch()
 
@@ -257,8 +270,8 @@ func main() {
 		//	 like 23-30:
 		searchInt, err := strconv.Atoi(searchArg)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Could not parse %s as int\n", searchArg)
-			os.Exit(1)
+			fmt.Fprintf(stdErr, "Could not parse %s as int\n", searchArg)
+			return 1
 		}
 		searchInt = searchInt - 1 // convert to the zero-based index we need
 		search.ValInts = []int{searchInt}
@@ -267,7 +280,14 @@ func main() {
 	for _, path := range files {
 		err := processFile(path, search, opts)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error processing %v: %v\n", path, err)
+			fmt.Fprintf(stdErr, "Error processing %v: %v\n", path, err)
 		}
 	}
+
+	return 0
+}
+
+func main() {
+	x := run(os.Stdout, os.Stderr, os.Args[1:])
+	os.Exit(x)
 }
