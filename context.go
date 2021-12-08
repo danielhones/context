@@ -18,6 +18,7 @@ import (
 const BLUE string = "\033[34m"
 const GREEN string = "\033[32m"
 const END_COLOR string = "\033[0m"
+const READ_FROM_STDIN = "-"
 
 // Visit every node in the tree, in a depth-first left-to-right traversal
 func visitAllNodes(cur *sitter.TreeCursor, f func(n *sitter.Node, h History), hist History) {
@@ -102,8 +103,17 @@ func context(src []byte, tree *sitter.Tree, matcher func(n *sitter.Node) bool, l
 	return lines
 }
 
+// Read a source code file at the given path and print any matching lines to opts.Out.
+// If path == "-", then this will read from opts.In instead.
 func processFile(path string, search Search, opts Options) error {
-	contents, err := ioutil.ReadFile(path)
+	var contents []byte
+	var err error
+
+	if path == READ_FROM_STDIN {
+		contents, err = ioutil.ReadAll(opts.In)
+	} else {
+		contents, err = ioutil.ReadFile(path)
+	}
 	if err != nil {
 		return err
 	}
@@ -153,7 +163,11 @@ func processFile(path string, search Search, opts Options) error {
 		return nil
 	}
 
-	fmt.Fprintf(opts.Out, "\n%s\n\n", path)
+	if path == READ_FROM_STDIN {
+		fmt.Fprintf(opts.Out, "\n<stdin>\n\n")
+	} else {
+		fmt.Fprintf(opts.Out, "\n%s\n\n", path)
+	}
 
 	// We want line numbers to be right justified, with leading space before them.
 	// So we get the width of the longest number first, and use that to build a
@@ -204,9 +218,10 @@ func usage(fs *flag.FlagSet) func() {
 			`Usage: context [options] <search> [file1 file2 ...]
 
 Find lines in a source code file and print the lines in the syntax tree 
-leading up to them.  The "search" command line argument is required, and
-so is at least one file argument.  By default, the search value is read
-as an integer and searches for a line number
+leading up to them.  The <search> argument is required, but there can be
+any number of file arguments passed.  If there are no file arguments, it
+will read from stdin.  By default, the search value is read as an integer
+and searches for a line number.
 
 Options:
 `,
@@ -225,8 +240,8 @@ Options:
 // This is effectively the main() function but with stdOut, StdErr, and command-line
 // args passed in as arguments to make testing easier. The return value is the integer
 // that main should exit with
-func run(stdOut io.Writer, stdErr io.Writer, args []string) int {
-	opts := Options{Out: stdOut, Err: stdErr}
+func run(stdOut io.Writer, stdErr io.Writer, stdIn io.Reader, args []string) int {
+	opts := Options{Out: stdOut, Err: stdErr, In: stdIn}
 
 	fs := flag.NewFlagSet("", flag.ContinueOnError)
 	fs.SetOutput(stdErr)
@@ -243,7 +258,9 @@ func run(stdOut io.Writer, stdErr io.Writer, args []string) int {
 	)
 
 	err := fs.Parse(args)
-	if err != nil || len(fs.Args()) < 2 {
+	// The 1 remaining required arg is the search value, hence the check for len < 1.
+	// Any additional args are files, otherwise we read from stdin.
+	if err != nil || len(fs.Args()) < 1 {
 		if err == flag.ErrHelp {
 			return 0 // Help message was requested with the -h flag
 		}
@@ -277,6 +294,10 @@ func run(stdOut io.Writer, stdErr io.Writer, args []string) int {
 		search.ValInts = []int{searchInt}
 	}
 
+	if len(files) == 0 {
+		files = []string{READ_FROM_STDIN}
+	}
+
 	for _, path := range files {
 		err := processFile(path, search, opts)
 		if err != nil {
@@ -288,6 +309,6 @@ func run(stdOut io.Writer, stdErr io.Writer, args []string) int {
 }
 
 func main() {
-	x := run(os.Stdout, os.Stderr, os.Args[1:])
+	x := run(os.Stdout, os.Stderr, os.Stdin, os.Args[1:])
 	os.Exit(x)
 }

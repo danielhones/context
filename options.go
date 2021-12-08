@@ -12,6 +12,7 @@ type Options struct {
 	Colorize  bool      // whether to colorize the output
 	Out       io.Writer // where to write the results
 	Err       io.Writer // where to write errors
+	In        io.Reader // where to write errors
 }
 
 func (o Options) AutoDetect() bool {

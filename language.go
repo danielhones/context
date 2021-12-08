@@ -40,13 +40,13 @@ var LANGUAGES = []LanguageInfo{
 		Name:        "Python",
 		Exts:        []string{"py"},
 		Lang:        python.GetLanguage(),
-		BranchTypes: []string{"elif_clause", "else_clause"},
+		BranchTypes: []string{"elif_clause", "else_clause", "except_clause"},
 	},
 	LanguageInfo{
 		Name:        "Ruby",
 		Exts:        []string{"rb"},
 		Lang:        ruby.GetLanguage(),
-		BranchTypes: []string{"elsif", "else", "case", "when"},
+		BranchTypes: []string{"elsif", "else", "case", "when", "rescue"},
 	},
 	LanguageInfo{
 		Name: "YAML",

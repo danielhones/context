@@ -39,3 +39,10 @@ func TestLangFromFilenameNoExtension(t *testing.T) {
 		t.Fatalf("Expected error for no file extension, got %v", err)
 	}
 }
+
+func TestLangFromStringUnsupported(t *testing.T) {
+	_, err := LangFromString("fake")
+	if err.Error() != "Unknown language for \"fake\"" {
+		t.Fatalf("Expected error for unknown language, got %v", err)
+	}
+}

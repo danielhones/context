@@ -8,8 +8,9 @@ import (
 func TestGoLineNumberBasic(t *testing.T) {
 	out := bytes.Buffer{}
 	errOut := bytes.Buffer{}
+	in := bytes.Buffer{}
 
-	run(&out, &errOut, []string{"-n", "25", "sample_files/sample.go"})
+	run(&out, &errOut, &in, []string{"-n", "25", "sample_files/sample.go"})
 	expected := `
 sample_files/sample.go
 
@@ -20,14 +21,15 @@ sample_files/sample.go
 25:			result += x.String
 
 `
-	assertStringEquals(t, expected, out.String(), "")
+	assertStringEqual(t, expected, out.String(), "")
 }
 
 func TestGoLineNumberMultipleIf(t *testing.T) {
 	out := bytes.Buffer{}
 	errOut := bytes.Buffer{}
+	in := bytes.Buffer{}
 
-	run(&out, &errOut, []string{"-n", "54", "sample_files/sample.go"})
+	run(&out, &errOut, &in, []string{"-n", "54", "sample_files/sample.go"})
 	expected := `
 sample_files/sample.go
 
@@ -41,14 +43,15 @@ sample_files/sample.go
 54:			fmt.Println(i)
 
 `
-	assertStringEquals(t, expected, out.String(), "Failed if/elseif line number case")
+	assertStringEqual(t, expected, out.String(), "Failed if/elseif line number case")
 }
 
 func TestGoLineNumberSwitchCase(t *testing.T) {
 	out := bytes.Buffer{}
 	errOut := bytes.Buffer{}
+	in := bytes.Buffer{}
 
-	run(&out, &errOut, []string{"-n", "72", "sample_files/sample.go"})
+	run(&out, &errOut, &in, []string{"-n", "72", "sample_files/sample.go"})
 	expected := `
 sample_files/sample.go
 
@@ -63,14 +66,15 @@ sample_files/sample.go
 72:			fmt.Println(i)
 
 `
-	assertStringEquals(t, expected, out.String(), "")
+	assertStringEqual(t, expected, out.String(), "")
 }
 
 func TestGoStringMatch(t *testing.T) {
 	out := bytes.Buffer{}
 	errOut := bytes.Buffer{}
+	in := bytes.Buffer{}
 
-	run(&out, &errOut, []string{"-n", "-e", "\"Buzz\"", "sample_files/sample.go"})
+	run(&out, &errOut, &in, []string{"-n", "-e", "\"Buzz\"", "sample_files/sample.go"})
 
 	expected := `
 sample_files/sample.go
@@ -95,5 +99,5 @@ sample_files/sample.go
 88:			DivisorString{5, "Buzz"},
 
 `
-	assertStringEquals(t, expected, out.String(), "")
+	assertStringEqual(t, expected, out.String(), "")
 }

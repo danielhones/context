@@ -1,15 +1,17 @@
-;; Wrapper functions around the pycontext/rbcontext command line utilities:
-;; https://github.com/danielhones/context
-
-
 (defvar context-keybinding-prefix "C-c q ")  ; need to have a space at the end
 
-(defvar context-script-map
-  '((ruby-mode "rbcontext")
-    (python-mode "pycontext")))
+(defvar context-script "code-context") ; Name or path of the context executable
 
-(defun context-script ()
-  (cadr (assoc major-mode context-script-map)))
+(defvar context-language-map
+  '((go-mode "go")
+    (js-mode "js")
+    (js2-mode "js")
+    (python-mode "py")
+    (ruby-mode "rb")
+    (yaml-mode "yml")))
+
+(defun context-language ()
+  (cadr (assoc major-mode context-language-map)))
 
 (defun current-line-number ()
   (line-number-at-pos (point)))
@@ -23,6 +25,8 @@
       (setq buffer-read-only nil)
       (erase-buffer)
       (insert (concat command "\n"))
+      ;; This next line can provide syntax-highlighting, but because these aren't completed
+      ;; source files, it doesn't always look right:
       (funcall mode)
       (start-process-shell-command "context" context-buffer command)
       (process-send-string "context" source-code)
@@ -35,22 +39,24 @@
   (interactive)
   (save-excursion
     (let* ((look-for (number-to-string (current-line-number)))
-           (cmd (combine-and-quote-strings (list (context-script) "-nl" look-for))))
+           (cmd (combine-and-quote-strings (list context-script "-l" (context-language) "-n" look-for))))
       (cond (look-for (run-command-in-context-window (buffer-string) cmd))))))
 
 (defun show-regex-context (look-for)
   "Show context using the look-for argument as a regex"
   (interactive "sLook for: ")
   (save-excursion
-    (let ((cmd (combine-and-quote-strings (list (context-script) "-ne" look-for))))
+    (let ((cmd (combine-and-quote-strings (list context-script "-l" (context-language) "-n" "-e" look-for))))
           (cond (look-for (run-command-in-context-window (buffer-string) cmd))))))
 
 (defun show-at-point-context ()
   "Show context for the symbol currently at point"
   (interactive)
   (save-excursion
-    (let* ((look-for (concat "\\b" (thing-at-point 'symbol t) "\\b"))
-           (cmd (combine-and-quote-strings (list (context-script) "-ne" look-for))))
+    (let* ((look-for (thing-at-point 'symbol t))
+           ;; TODO: Use this once regex match is re-implemented:
+           ;; (look-for (concat "\\b" (thing-at-point 'symbol t) "\\b"))
+           (cmd (combine-and-quote-strings (list context-script "-l" (context-language) "-n" "-e" look-for))))
       (cond (look-for
              (run-command-in-context-window (buffer-string) cmd))
             (t
