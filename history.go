@@ -4,9 +4,9 @@ import (
 	sitter "github.com/smacker/go-tree-sitter"
 )
 
-//
+// This struct acts as a stack that holds the Node history while walking the tree.
 type History struct {
-	nodes []*sitter.Node // List of line nodes in our current path in the tree
+	nodes []*sitter.Node // List of nodes in our current path in the tree
 }
 
 func (h *History) Push(x *sitter.Node) {

@@ -23,8 +23,6 @@ search value is read as an integer and searches for a line number.
 There can be any number of file arguments passed.  If there are none, it
 will read from stdin.  When reading from stdin, you must include a -l flag
 to indicate what language to use for parsing.
-
-Options:
 `
 
 // Special value for the processFile function to indicate we want to read from stdin:
@@ -34,6 +32,49 @@ const READ_FROM_STDIN = "-"
 const BLUE string = "\033[34m"
 const GREEN string = "\033[32m"
 const END_COLOR string = "\033[0m"
+
+// Used in the Search struct to indicate match types:
+const MATCH_TYPE_REGEX = "regex"
+const MATCH_TYPE_LINE = "line"
+
+// This struct stores information about options for processing files.  It's primarily
+// used as an argument to processFile
+type Options struct {
+	PrintNums bool      // whether to print line numbers in the output
+	Language  string    // string indicating which language to use when parsing
+	Colorize  bool      // whether to colorize the output
+	Out       io.Writer // where to write the results
+	Err       io.Writer // where to write errors
+	In        io.Reader // where to read input
+}
+
+func (o Options) AutoDetect() bool {
+	return o.Language == ""
+}
+
+// This struct holds information about what to look for in the source code, and what type
+// of match it is.  Primarily used as an argument to processFile
+type Search struct {
+	MatchType string
+	// If a regex/string match, this is the value to search for.  If not a regex/string
+	// match, then this value is empty and meaningless:
+	Val string
+	// If a line match, these are the line numbers to search for.  If not a line match,
+	// then this value is empty and meaningless:
+	ValInts []int
+}
+
+func (s Search) IsRegexMatch() bool {
+	return s.MatchType == MATCH_TYPE_REGEX
+}
+
+func (s *Search) SetRegexMatch() {
+	(*s).MatchType = MATCH_TYPE_REGEX
+}
+
+func NewSearch() Search {
+	return Search{MatchType: MATCH_TYPE_LINE}
+}
 
 // Visit every node in the tree, in a depth-first left-to-right traversal. Call the f function
 // on each node.
@@ -238,10 +279,8 @@ func usage(fs *flag.FlagSet) func() {
 	// Return a function so we can write to specified output and print the right defaults:
 	return func() {
 		w := fs.Output()
-		fmt.Fprintf(
-			w,
-			HELP_TEXT,
-		)
+		fmt.Fprintf(w, HELP_TEXT)
+		fmt.Fprintf(w, "\nOptions:\n")
 		fs.PrintDefaults()
 
 		fmt.Fprintf(w, "\nLanguages:\n")
