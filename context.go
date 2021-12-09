@@ -14,13 +14,29 @@ import (
 	sitter "github.com/smacker/go-tree-sitter"
 )
 
+const HELP_TEXT = `Usage: context [options] <search> [file1 file2 ...]
+
+Find lines in a source code file and print the lines in the syntax tree 
+leading up to them.  The <search> argument is required.  By default, the
+search value is read as an integer and searches for a line number.
+
+There can be any number of file arguments passed.  If there are none, it
+will read from stdin.  When reading from stdin, you must include a -l flag
+to indicate what language to use for parsing.
+
+Options:
+`
+
+// Special value for the processFile function to indicate we want to read from stdin:
+const READ_FROM_STDIN = "-"
+
 // Some ANSI color codes for terminal output:
 const BLUE string = "\033[34m"
 const GREEN string = "\033[32m"
 const END_COLOR string = "\033[0m"
-const READ_FROM_STDIN = "-"
 
-// Visit every node in the tree, in a depth-first left-to-right traversal
+// Visit every node in the tree, in a depth-first left-to-right traversal. Call the f function
+// on each node.
 func visitAllNodes(cur *sitter.TreeCursor, f func(n *sitter.Node, h History), hist History) {
 	hist.Push(cur.CurrentNode())
 
@@ -132,8 +148,17 @@ func processFile(path string, search Search, opts Options) error {
 		}
 	} else {
 		for _, x := range search.ValInts {
-			matchingLines[x] = struct{}{}
+			// If x is not < len(srcLines), it's looking for a line number that's
+			// not in the file, so we can omit it
+			if x < len(srcLines) {
+				matchingLines[x] = struct{}{}
+			}
 		}
+	}
+
+	if len(matchingLines) == 0 {
+		// No need to parse anything, nothing will match
+		return nil
 	}
 
 	// Then the matcher just needs to check whether the current Node starts
@@ -215,16 +240,7 @@ func usage(fs *flag.FlagSet) func() {
 		w := fs.Output()
 		fmt.Fprintf(
 			w,
-			`Usage: context [options] <search> [file1 file2 ...]
-
-Find lines in a source code file and print the lines in the syntax tree 
-leading up to them.  The <search> argument is required, but there can be
-any number of file arguments passed.  If there are no file arguments, it
-will read from stdin.  By default, the search value is read as an integer
-and searches for a line number.
-
-Options:
-`,
+			HELP_TEXT,
 		)
 		fs.PrintDefaults()
 
@@ -258,12 +274,14 @@ func run(stdOut io.Writer, stdErr io.Writer, stdIn io.Reader, args []string) int
 	)
 
 	err := fs.Parse(args)
-	// The 1 remaining required arg is the search value, hence the check for len < 1.
-	// Any additional args are files, otherwise we read from stdin.
-	if err != nil || len(fs.Args()) < 1 {
-		if err == flag.ErrHelp {
-			return 0 // Help message was requested with the -h flag
-		}
+	if err == flag.ErrHelp {
+		// Help message was requested with the -h flag
+		return 0
+	} else if err != nil {
+		// Usage was already printed here by FlagSet.failf, so just return:
+		return 2
+	} else if len(fs.Args()) < 1 {
+		// The 1 remaining required arg is the search value, hence the check for len < 1.
 		fs.Usage()
 		return 2
 	}
@@ -278,7 +296,6 @@ func run(stdOut io.Writer, stdErr io.Writer, stdIn io.Reader, args []string) int
 	files := fs.Args()[1:]
 
 	search := NewSearch()
-
 	if *matchRegex {
 		search.Val = searchArg
 		search.SetRegexMatch()

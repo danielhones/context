@@ -27,7 +27,7 @@ func assertEqual(t *testing.T, expected interface{}, actual interface{}, msg str
 
 func assertNotEqual(t *testing.T, expected interface{}, actual interface{}, msg string) {
 	if expected == actual {
-		t.Fatalf("%s\nActual: %v\nExpected: %v", msg, actual, expected)
+		t.Fatalf("%s\nActual: %v\nExpected: Not %v", msg, actual, expected)
 	}
 }
 
@@ -39,31 +39,28 @@ func TestRunUsage(t *testing.T) {
 	// Make sure it prints our custom usage message:
 	exitCode := run(&out, &errOut, &in, []string{})
 	assertEqual(t, exitCode, 2, "")
-	expected := `Usage: context [options] <search> [file1 file2 ...]
-
-Find lines in a source code file and print the lines in the syntax tree 
-leading up to them.  The <search> argument is required, but there can be
-any number of file arguments passed.  If there are no file arguments, it
-will read from stdin.  By default, the search value is read as an integer
-and searches for a line number.
-
-Options:
-`
-	assertInString(t, expected, errOut.String(), "")
+	assertInString(t, HELP_TEXT, errOut.String(), "")
 
 	// Check that intentionally using -h flag prints usage and exits 0:
 	out.Reset()
 	errOut.Reset()
 	exitCode = run(&out, &errOut, &in, []string{"-h"})
 	assertEqual(t, exitCode, 0, "")
-	assertInString(t, expected, errOut.String(), "")
+	assertInString(t, HELP_TEXT, errOut.String(), "")
 }
 
-func TestNoMatchingLines(t *testing.T) {
+func TestRunNoMatchingLines(t *testing.T) {
 	out := bytes.Buffer{}
 	errOut := bytes.Buffer{}
 	in := bytes.Buffer{}
-	exitCode := run(&out, &errOut, &in, []string{"-n", "999999", "sample_files/sample.go"})
+	exitCode := run(&out, &errOut, &in, []string{"999999", "sample_files/sample.go"})
+	assertEqual(t, exitCode, 0, "")
+	assertStringEqual(t, "", out.String(), "")
+
+	out.Reset()
+	errOut.Reset()
+	// Search by string instead of line number, code handles it slightly different:
+	exitCode = run(&out, &errOut, &in, []string{"-e", "foobarbaz", "sample_files/sample.go"})
 	assertEqual(t, exitCode, 0, "")
 	assertStringEqual(t, "", out.String(), "")
 }
@@ -156,9 +153,9 @@ func main() {
 }
 
 func TestProcessFileUnsupportedLanguage(t *testing.T) {
-	search := Search{}
+	search := Search{ValInts: []int{25}}
 	opts := Options{Language: "foobar"}
 	err := processFile("sample_files/sample.go", search, opts)
-	assertNotEqual(t, err, nil, "")
+	assertNotEqual(t, err, nil, "Failed unsupported language test")
 	assertInString(t, "Unknown language", err.Error(), "")
 }
