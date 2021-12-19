@@ -101,12 +101,12 @@ func TestColorization(t *testing.T) {
 	errOut := bytes.Buffer{}
 	in := bytes.Buffer{}
 
-	run(&out, &errOut, &in, []string{"-n", "-c", "19", "sample_files/sample.go"})
+	run(&out, &errOut, &in, []string{"-n", "-c", "23", "sample_files/sample.go"})
 	expected := fmt.Sprintf(`
 sample_files/sample.go
 
 %s 1:%spackage main
-%s19:%s%sfunc (fb FizzBuzzMap) String(i int) string {%s
+%s23:%s%sfunc (fb FizzBuzzMap) String(i int) string {%s
 
 `, BLUE, END_COLOR, BLUE, END_COLOR, GREEN, END_COLOR)
 	assertStringEqual(t, expected, out.String(), "")
@@ -120,7 +120,7 @@ sample_files/sample.go
 sample_files/sample.go
 
 %s 1:%spackage main
-%s19:%sfunc %s(fb FizzBuzzMap)%s String(i int) string {
+%s23:%sfunc %s(fb FizzBuzzMap)%s String(i int) string {
 
 `, BLUE, END_COLOR, BLUE, END_COLOR, GREEN, END_COLOR)
 	assertStringEqual(t, expected, out.String(), "")
